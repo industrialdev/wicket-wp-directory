@@ -2,7 +2,7 @@
 title: "MVP Plan"
 audience: [developer, agent]
 status: approved
-updated: 2026-09-29
+updated: 2026-09-30
 ---
 
 > Implementation plan for the MVP (Individual + Organization directories). Source files referenced below don't exist yet; they are the planned layout. Update this doc as decisions change.
@@ -97,8 +97,8 @@ The config below is the prototype's model trimmed to Individual and Organization
 
 - **`type`:** `individual` or `organization`.
 - **`eligibility`** decides which records can appear. These conditions are built into the base API query, not shown as visitor filters.
-  - `require_active_membership` (bool, default true). The CHFA template uses `membership_entries_active_eq` for orgs; the people equivalent needs to be verified.
-  - `membership_ids`: membership tiers to include. Options come from the MDP memberships list.
+  - `require_active_membership` (bool, default true). Verified: `membership_people_status_eq: 'Active'` for people, `membership_entries_status_eq: 'Active'` for orgs (see [api-queries.md](api-queries.md)).
+  - `membership_ids`: membership tier **UUIDs** to include. Options come from `GET memberships`, filtered by `attributes.type` (`individual` / `organization`) to match the directory type.
   - `org_types` (organization directories only).
   - `opt_in`: `{schema_key, field, value}` (for example `orgmemberdir.optin = true`). It becomes `search_query['data_fields.{key}.value.{field}']`.
 - **`card`:** toggles taken from the prototype's `defaultCardFields` / `orgCardFields`, without Organization Contact.
@@ -114,17 +114,30 @@ The config below is the prototype's model trimmed to Individual and Organization
 
 ## Query and data layer
 - **`RequestParams`** reads flat parameters prefixed per directory: `wd{ID}_keyword`, `wd{ID}_location`, `wd{ID}_sort`, `wd{ID}_pg`, and `wd{ID}_{facet_key}[]`. The prefix lets two blocks sit on one page, and flat names let `search-form`'s built-in `$_GET[url-param]` pre-fill work unchanged. Everything is sanitized with `sanitize_text_field` / `sanitize_key`, and each facet value is checked against its allowed options.
-- **Query builders** produce `['filter' => [...]]` from eligibility + keyword + location + facets, plus `sort`, `page[size|number]` and `include=emails,phones,addresses,web_addresses`.
+- **Query builders** produce `['filter' => [...]]` from eligibility + keyword + location + facets, plus `sort`, `page[size|number]` and `include=emails,phones,addresses,web_addresses`. The exact, verified keys and example payloads are in [api-queries.md](api-queries.md).
+  - **The MDP silently ignores unknown predicates and sort keys.** A typo returns unfiltered results, which for eligibility means the whole tenant. The builders are unit-tested against the documented keys, and sort values are whitelisted.
+  - **Eligibility:**
+    - people: `membership_people_status_eq` plus `membership_people_membership_uuid_in`;
+    - orgs: `membership_entries_status_eq` plus `membership_entries_membership_uuid_in`, and `type_in`;
+    - opt-in: `search_query['data_fields.{key}.value.{field}']`.
   - **Org keyword:** `legal_name_{lang}_cont`.
-  - **Person keyword:** an OR group over `given_name_cont`, `family_name_cont`, `full_name_cont` and `identifying_number_eq`.
-  - **Location:** an OR group over `addresses_city_i_cont` and `addresses_state_name_i_cont`.
-  - **Sort:** individual uses `given_name` / `family_name` (asc or desc); organization uses `legal_name_{lang}` (asc or desc).
+  - **Person keyword:** an OR group (Ransack `g: [{m: 'or', …}]`) over `given_name_cont`, `family_name_cont`, `full_name_cont` and `identifying_number_eq`.
+  - **Location:** an OR group over `addresses_city_i_cont` and `addresses_state_name_i_cont`. It matches any of the record's addresses.
+  - **Facets:** one `search_query` key per facet. An array value means any-of, and separate keys are ANDed.
+  - **Sort:** individual uses `given_name` / `family_name` (asc or desc); organization uses `legal_name_{lang}` (asc or desc). A bare `legal_name` is ignored.
 - **`DirectoryRepository`** caches each response in a transient keyed by `md5(dir_id, cache_version, lang, params)`. The TTL defaults to 10 minutes and can be changed with the `wicket_directory/cache_ttl` filter. On an API exception it logs the error and returns an empty page, and the page shows a friendly "unavailable" message rather than dying.
 - **`ContactResolver`** implements the prototype's truth table once and is used for all four record types:
   1. Filter by type.
   2. If neither `only_directory` nor `only_primary` is set: take the first record flagged show-in-directory, else the first primary record, else nothing.
   3. If either flag is set: keep only records matching the set flags (AND when both are set). There's no fallback.
   4. An empty result hides the row. We don't show "Not provided".
+
+  The fields are `type` and `consent_directory` on all four record types. **`web_addresses` have no `primary` field.** Proposed handling, to confirm before ticket 2.5: websites fall back to the first record of the matching type, and `only_primary` isn't offered for them.
+- **Tier label:** `include=person_memberships` doesn't exist. After the main query, `DirectoryRepository` makes **one batch request per page**, cached with the page:
+  - people: `person_memberships/query` with `person_uuid_in` + `status_eq: 'Active'`, `include=membership`;
+  - orgs: `organization_memberships/query` with `organization_uuid_in`.
+
+  It's made only when the tier toggle is on. Filter on `status`, not on the `active` attribute, which is unreliable.
 - **`EntryMapper`** turns API resources into flat DTOs. Data-field enum keys become labels through `wicket_get_schemas_options()`, with schemas cached once per request.
 - **Hooks for developers** (these replace the deferred Developer panel):
   - `wicket_directory/query_args` and `wicket_directory/query_args_{slug}`
@@ -232,12 +245,7 @@ Publish and Save Draft are WordPress's own. The block editor preview serves as t
 - **Local only:** the `~/.config/wicket-tools/config.toml` `init_dev` entry. Adding it to the CLI's built-in defaults needs a CLI release.
 
 ## Implementation order
-0. **API spike, done first and short.** Confirm these against a staging MDP, using `wicket_api_client()` in `wp shell`:
-   - `people/query` filter names for active membership, tier (`membership_uuid_in`?), keyword and address;
-   - the contact record fields for type (`type` / `phone_type`) and consent (`consent_directory` / `consent`) on addresses, emails, phones and web addresses;
-   - how a person's membership tier comes back (`include=person_memberships`?).
-
-   Write the findings into the plugin's `docs/engineering/api-queries.md`.
+0. **API spike (done 2026-09-30).** Verified against the demo-woocommerce staging MDP. Findings, example payloads and plan corrections are in [api-queries.md](api-queries.md).
 1. Scaffold: main file, composer, `Plugin`, dependency guard, CPT and meta, `DirectoryConfig`.
 2. Query and data layer: `RequestParams`, the query builders, `DirectoryRepository`, `ContactResolver`, `EntryMapper`, `FacetOptions`.
 3. The native block's PHP side (`block.json`, `DirectoryBlock`, `BlockAttributes`) together with the renderer, templates and CSS/JS, so the block is the embed point from the start.

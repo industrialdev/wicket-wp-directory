@@ -14,7 +14,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 
 | ID | Ticket | Depends on | Status |
 |---|---|---|---|
-| 0.1 | [API spike: verify MDP query filters for people and organizations](#01) | — | To do |
+| 0.1 | [API spike: verify MDP query filters for people and organizations](#01) | — | Done |
 | 1.1 | [Plugin scaffold: main file, composer, bootstrap, dependency guard](#11) | — | To do |
 | 1.2 | [Directory custom post type and config post meta](#12) | 1.1 | To do |
 | 1.3 | [DirectoryConfig value object and DirectoryType enum](#13) | 1.2 | To do |
@@ -65,6 +65,8 @@ To verify:
 - docs/engineering/api-queries.md created with frontmatter, listing each verified filter/field with a working example payload.
 - Any assumption in the MVP plan that turned out wrong is flagged and the plan doc updated.
 - api-queries.md added to the Documentation table in AGENTS.md.
+
+**Outcome:** see [api-queries.md](api-queries.md). Tickets 2.2, 2.3, 2.4, 2.5 and 5.2 below have been updated with the verified names.
 
 ## 1. Scaffold
 
@@ -156,9 +158,10 @@ Add src/Query/RequestParams.php.
 
 Add src/Query/OrganizationQueryBuilder.php that builds the Ransack payload.
 
-- Eligibility: membership_entries_active_eq, membership tiers, org types, opt-in data field (search_query data_fields.{key}.value.{field}).
-- Keyword: legal_name_{lang}_cont. Location: OR group of addresses_city_i_cont / addresses_state_name_i_cont.
-- Facets: data-field and org-type conditions.
+- Eligibility: membership_entries_status_eq 'Active', membership_entries_membership_uuid_in (tier UUIDs), type_in (org-type slugs), opt-in data field (search_query data_fields.{key}.value.{field}).
+- Keyword: legal_name_{lang}_cont. Location: OR group (`g: [{m: 'or', …}]`) of addresses_city_i_cont / addresses_state_name_i_cont.
+- Facets: one search_query key per data-field facet (array = any-of); org-type facet intersected with org_types eligibility into a single type_in.
+- The MDP silently ignores unknown predicates and sort keys, so emit only the keys in api-queries.md and whitelist sort values.
 - sort (legal_name_{lang} asc/desc), page[size|number], include=emails,phones,addresses,web_addresses.
 - Apply the wicket_directory/query_args and wicket_directory/query_args_{slug} filters.
 - Reuse the base plugin's query-string fix (page[0] -> page[]).
@@ -177,9 +180,9 @@ Add src/Query/OrganizationQueryBuilder.php that builds the Ransack payload.
 
 Add src/Query/PersonQueryBuilder.php, same contract as the organization builder.
 
-- Eligibility: active membership and membership tiers (filter names from the API spike).
-- Keyword: OR group over given_name_cont, family_name_cont, full_name_cont, identifying_number_eq.
-- Location: OR group over addresses city/state.
+- Eligibility: membership_people_status_eq 'Active', membership_people_membership_uuid_in (tier UUIDs).
+- Keyword: OR group (`g: [{m: 'or', …}]`) over given_name_cont, family_name_cont, full_name_cont, identifying_number_eq.
+- Location: OR group over addresses_city_i_cont / addresses_state_name_i_cont.
 - Sort: given_name / family_name asc/desc.
 - Same includes, paging and filters as the organization builder.
 
@@ -202,6 +205,7 @@ Add src/Api/DirectoryRepository.php.
 - Transient cache keyed by md5(directory ID, cache_version, language, params); TTL 10 min via the wicket_directory/cache_ttl filter.
 - On an API exception: log with Wicket()->log()->error(..., ['source' => 'wicket-directory']) and return an empty ResultPage flagged as unavailable (never die or print errors).
 - ResultPage: items, total, current page, total pages.
+- Tier labels: when the tier toggle is on, one batch request per page (person_memberships/query or organization_memberships/query with {person|organization}_uuid_in + status_eq 'Active', include=membership), cached with the page. See api-queries.md "Tiers on the card".
 
 **Acceptance criteria:**
 
@@ -222,6 +226,8 @@ Rules (from the prototype):
 2. Neither only_directory nor only_primary set: first record flagged show-in-directory, else first primary, else nothing.
 3. Either flag set: keep only records matching the set flags (AND when both); no fallback.
 4. Empty result hides the row on the card (no "Not provided").
+
+Fields (verified in 0.1): `type` and `consent_directory` on all four record types; `primary` on emails, phones and addresses. **web_addresses have no `primary`**: proposed fallback is the first record of the matching type, and only_primary doesn't apply (confirm before building).
 
 **Acceptance criteria:**
 
@@ -471,7 +477,7 @@ src/Admin/DirectoryMetaBoxes.php + src/Admin/views/.
 
 Card toggles for the selected type (see plan "Directory config" -> card).
 
-- Contact rule fieldset repeated for address, email, phone and website: Type (Any + resource types), Only show if flagged "Show in Directory", Only show if primary, with hint text explaining the rules.
+- Contact rule fieldset repeated for address, email, phone and website: Type (Any + resource types), Only show if flagged "Show in Directory", Only show if primary (not for website: web addresses have no primary flag), with hint text explaining the rules.
 - Address format radio.
 - Eyebrow and tag-chip data-field pickers.
 - Only the current type's toggles are shown.
