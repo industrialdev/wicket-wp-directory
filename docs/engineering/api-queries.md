@@ -1,7 +1,7 @@
 ---
 title: "MDP API Queries"
 audience: [developer, agent]
-updated: 2026-09-30
+updated: 2026-10-02
 ---
 
 # Verified MDP queries for directories
@@ -329,7 +329,7 @@ These are the assumptions in `mvp-plan.md` that the spike changed. The plan and 
 1. **People active membership** is `membership_people_status_eq: 'Active'`. **Tiers** use `membership_people_membership_uuid_in`. The plan's `membership_uuid_in?` guess is silently ignored.
 2. **Org active membership:** `membership_entries_status_eq: 'Active'` is preferred over `membership_entries_active_eq`. They return the same set, but `status` is also what the tier lookup reads.
 3. **Person tier on the card:** there is no `include=person_memberships`. It needs one batch `person_memberships/query` per page (or `organization_memberships/query` for orgs).
-4. **`ContactResolver` and websites.** `web_addresses` have no `primary` flag, so the truth table's "else first primary" step and the `only_primary` option don't apply to websites. **Proposed, to be confirmed before ticket 2.5:**
+4. **`ContactResolver` and websites.** `web_addresses` have no `primary` flag, so the truth table's "else first primary" step and the `only_primary` option don't apply to websites. **Confirmed for ticket 2.5 (2026-10-02):**
    - websites fall back to the **first record of the matching type**;
    - `only_primary` isn't offered for the website rule (ticket 5.2).
 5. **Contact field names:**

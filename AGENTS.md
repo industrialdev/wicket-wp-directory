@@ -54,7 +54,7 @@ Block render_callback / ServerSideRender
       → Query\RequestParams      (landed) flat GET params prefixed `wd{ID}_…`; sort tokens from DirectoryType::sort_options()
       → Query\OrganizationQueryBuilder | PersonQueryBuilder (landed) → Query\DirectoryQuery (landed; path() + body(), or matches_nothing)
       → Api\DirectoryRepository  (landed) builder by type → API + transient cache → Api\ResultPage (landed; `unavailable` on API failure)
-      → EntryMapper + ContactResolver → DTOs
+      → EntryMapper + Data\ContactResolver (landed; static resolve(field, records, rule), the truth table) → DTOs
       → TemplateLoader → templates/ (theme can override at wicket-directory/…)
 ```
 

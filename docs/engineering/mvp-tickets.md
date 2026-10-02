@@ -22,7 +22,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | 2.2 | [OrganizationQueryBuilder for organizations/query](#22) | 0.1, 2.1 | Done |
 | 2.3 | [PersonQueryBuilder for people/query](#23) | 0.1, 2.1 | Done |
 | 2.4 | [DirectoryRepository: execute queries with caching and error handling](#24) | 2.2, 2.3 | Done |
-| 2.5 | [ContactResolver: shared rules for address, email, phone and website](#25) | 0.1 | To do |
+| 2.5 | [ContactResolver: shared rules for address, email, phone and website](#25) | 0.1 | Done |
 | 2.6 | [EntryMapper and entry DTOs](#26) | 2.4, 2.5 | To do |
 | 2.7 | [FacetOptions: facet choices from schemas and resource types](#27) | 1.3 | To do |
 | 3.1 | [Block registration (server side) and BlockAttributes](#31) | 1.1 | To do |
@@ -287,12 +287,20 @@ Rules (from the prototype):
 3. Either flag set: keep only records matching the set flags (AND when both); no fallback.
 4. Empty result hides the row on the card (no "Not provided").
 
-Fields (verified in 0.1): `type` and `consent_directory` on all four record types; `primary` on emails, phones and addresses. **web_addresses have no `primary`**: proposed fallback is the first record of the matching type, and only_primary doesn't apply (confirm before building).
+Fields (verified in 0.1): `type` and `consent_directory` on all four record types; `primary` on emails, phones and addresses. **web_addresses have no `primary`**: the fallback is the first record of the matching type, and only_primary doesn't apply (confirmed 2026-10-02).
 
 **Acceptance criteria:**
 
 - One implementation, four call sites.
 - Every truth-table branch unit tested for each record type.
+
+**Outcome:** `src/Data/ContactResolver.php`. Unit tests are still ticket 6.2. Checked with `wp eval-file`: 64 assertions on fixtures cover every truth-table branch for addresses, emails and phones, plus the website variants, null/non-array entries, strict flags and the unknown-field error. A run against 10 staging orgs with the default org card rules picked the primary addresses, and it showed an unflagged website through the first-of-type fallback. Notes for later tickets:
+- `ContactResolver::resolve($field, $records, $rule)` is static and pure (no API calls). `$field` is one of `DirectoryConfig::CONTACT_FIELDS`; an unknown field throws `InvalidArgumentException`. `$records` are the entity's JSON:API resources for that field, in relationship order. Pass `getIncludedRelationship()`'s result straight in (use `?? []`), because nulls and other non-arrays are skipped. `$rule` is `$config->card[$field]`.
+- **`ContactResolver::RELATIONSHIPS`** maps each field to its relationship name (`address` → `addresses`, `email` → `emails`, `phone` → `phones`, `website` → `web_addresses`). 2.6 loops over it, so all four fields share one call site.
+- **Return value.** It returns `list<resource>`. With no flags set (the default rule), that is at most one record. With `only_directory` / `only_primary` set, it is **every** matching record, as in the prototype. 2.6 decides whether the card shows one or all. It returns `[]` when `show` is false or nothing matches, and the card then hides the row.
+- **Websites.** The default rule takes the first `consent_directory` website, else the first website of the matching type. `only_primary` is ignored, even if a stored rule has it set and even if a record has a `primary` attribute.
+- **Flags are strict.** Only a real `true` counts for `consent_directory` and `primary` (`1` and `"true"` don't), so an odd payload never shows a record that wasn't opted in. The type match is an exact string compare against the record's `attributes.type` slug.
+- The resolver doesn't look at display values. A picked record with an empty `address` / `number_*` is still returned, and 2.6 or the template should hide that row.
 
 <a id="26"></a>
 

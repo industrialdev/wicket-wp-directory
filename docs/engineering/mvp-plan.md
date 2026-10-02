@@ -132,7 +132,7 @@ The config below is the prototype's model trimmed to Individual and Organization
   3. If either flag is set: keep only records matching the set flags (AND when both are set). There's no fallback.
   4. An empty result hides the row. We don't show "Not provided".
 
-  The fields are `type` and `consent_directory` on all four record types. **`web_addresses` have no `primary` field.** Proposed handling, to confirm before ticket 2.5: websites fall back to the first record of the matching type, and `only_primary` isn't offered for them.
+  The fields are `type` and `consent_directory` on all four record types. **`web_addresses` have no `primary` field.** So websites fall back to the first record of the matching type, and `only_primary` isn't offered for them (confirmed 2026-10-02, ticket 2.5).
 - **Tier label:** `include=person_memberships` doesn't exist. After the main query, `DirectoryRepository` makes **one batch request per page**, cached with the page:
   - people: `person_memberships/query` with `person_uuid_in` + `status_eq: 'Active'`, `include=membership`;
   - orgs: `organization_memberships/query` with `organization_uuid_in`.
