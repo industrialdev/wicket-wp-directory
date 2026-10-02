@@ -18,7 +18,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | 1.1 | [Plugin scaffold: main file, composer, bootstrap, dependency guard](#11) | — | Done |
 | 1.2 | [Directory custom post type and config post meta](#12) | 1.1 | Done |
 | 1.3 | [DirectoryConfig value object and DirectoryType enum](#13) | 1.2 | Done |
-| 2.1 | [RequestParams: parse and sanitize visitor GET parameters](#21) | 1.3 | To do |
+| 2.1 | [RequestParams: parse and sanitize visitor GET parameters](#21) | 1.3 | Done |
 | 2.2 | [OrganizationQueryBuilder for organizations/query](#22) | 0.1, 2.1 | To do |
 | 2.3 | [PersonQueryBuilder for people/query](#23) | 0.1, 2.1 | To do |
 | 2.4 | [DirectoryRepository: execute queries with caching and error handling](#24) | 2.2, 2.3 | To do |
@@ -168,6 +168,19 @@ Add src/Query/RequestParams.php.
 - Two directories on one page don't interfere with each other.
 - Invalid facet values, sorts and pages are dropped or clamped.
 - Unit tested.
+
+**Outcome:** `src/Query/RequestParams.php`, plus sort tokens on `DirectoryType`. Unit tests are still ticket 6.2. Notes for later tickets:
+- **Sort tokens.** `DirectoryType::sort_options()` lists language-neutral tokens and their labels: individual `first_name_asc|desc`, `last_name_asc|desc`; organization `name_asc|desc`. The first one is the default (`default_sort()`). `sanitize_sort()` returns a valid token or the type default. These tokens are what `defaultSort` stores and what `wd{ID}_sort` carries.
+  - 2.2/2.3 map tokens to MDP keys: `first_name` → `given_name`, `last_name` → `family_name`, `name` → `legal_name_{lang}`, with a `-` prefix for `_desc`.
+  - 3.1 `BlockAttributes` validates `defaultSort` with `DirectoryType::sanitize_sort()`. 4.1 needs the same tokens and labels in JS.
+- `RequestParams::from_request($directory_id, $config, $facet_options, $default_sort, hide_keyword:, hide_location:, hide_filters:, hide_order_by:, query:)`. The `hide_*` flags come from 3.1's attributes; `query` defaults to `$_GET` and is unslashed once. Properties are public readonly: `directory_id`, `keyword`, `location`, `sort`, `page`, `facets`.
+- An unknown visitor sort falls back to the block's `defaultSort`, and an invalid `defaultSort` falls back to the type default.
+- `page` is at least 1. It isn't capped to the last page, because that's only known after the query. 2.4/3.5 clamp it to `meta.page.total_pages`.
+- Keyword and location go through `sanitize_text_field` and are capped at 200 characters. An array value is ignored.
+- **Facet keys** come from `RequestParams::facet_key($facet)`: `org_type`, or `{schema_key}__{field}` for a data field. They have no dots because PHP turns dots in GET keys into `_`. Use this one function wherever a facet needs a key: GET params, the `$facet_options` map, and 2.7's `FacetOptions` output.
+- `$facet_options` is `facet key => allowed values` (2.7 supplies it). A facet missing from the map accepts no values. Selected values are sanitized, checked strictly against the allowed strings, and de-duplicated. A scalar `wd{ID}_{key}=x` is accepted as well as `[]`. Facets with nothing selected are left out of `facets`, so builders never send `''`.
+- `param($name)` builds the full GET key (e.g. `wd12_keyword`) for templates: `search-form`'s `url-param`, form field names, and the pagination format. `facet_values($facet)` gives the selected values for a facet.
+- The org-type facet isn't intersected with `eligibility.org_types` here. 2.2 does that, and 2.7/3.4 should only offer eligible org types.
 
 <a id="22"></a>
 
