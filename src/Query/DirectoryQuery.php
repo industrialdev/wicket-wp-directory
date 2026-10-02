@@ -34,6 +34,26 @@ final class DirectoryQuery
     ) {}
 
     /**
+     * The same query for another page.
+     *
+     * DirectoryRepository uses it to re-fetch the last page when a link points
+     * past it.
+     *
+     * @param int $number Page number; at least 1.
+     *
+     * @return self
+     */
+    public function with_page(int $number): self
+    {
+        $args = $this->args;
+        $page = is_array($args['page'] ?? null) ? $args['page'] : [];
+        $page['number'] = max(1, $number);
+        $args['page'] = $page;
+
+        return new self($this->endpoint, $args, $this->matches_nothing);
+    }
+
+    /**
      * The request path with its query string.
      *
      * @return string E.g. `organizations/query?page%5Bsize%5D=6&page%5Bnumber%5D=1&sort=legal_name_en&include=…`.

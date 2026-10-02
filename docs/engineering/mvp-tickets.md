@@ -21,7 +21,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | 2.1 | [RequestParams: parse and sanitize visitor GET parameters](#21) | 1.3 | Done |
 | 2.2 | [OrganizationQueryBuilder for organizations/query](#22) | 0.1, 2.1 | Done |
 | 2.3 | [PersonQueryBuilder for people/query](#23) | 0.1, 2.1 | Done |
-| 2.4 | [DirectoryRepository: execute queries with caching and error handling](#24) | 2.2, 2.3 | To do |
+| 2.4 | [DirectoryRepository: execute queries with caching and error handling](#24) | 2.2, 2.3 | Done |
 | 2.5 | [ContactResolver: shared rules for address, email, phone and website](#25) | 0.1 | To do |
 | 2.6 | [EntryMapper and entry DTOs](#26) | 2.4, 2.5 | To do |
 | 2.7 | [FacetOptions: facet choices from schemas and resource types](#27) | 1.3 | To do |
@@ -262,6 +262,16 @@ Add src/Api/DirectoryRepository.php.
 - A repeat visit with the same params is served from cache.
 - Saving a directory invalidates its cache.
 - API failure shows the friendly "unavailable" state, with a log entry.
+
+**Outcome:** `src/Api/DirectoryRepository.php` and `src/Api/ResultPage.php`, plus `DirectoryQuery::with_page()`. Unit tests are still ticket 6.2. Checked with `wp eval-file`: 27 assertions against the staging tenant, using real directory posts. They cover cache hits, invalidation, the out-of-range page, matches-nothing, the failure paths and their log entries, person and org tiers, the language in the key, and the TTL filter. Notes for later tickets:
+- `(new DirectoryRepository())->fetch($post, $config, $params, $per_page, $lang = null)` returns a `ResultPage` and never throws. It picks the builder from `$config->type` and passes `$post->post_name` as the slug. 3.2 calls it with the directory post it already loaded. The constructor takes an optional client factory (`callable(): object`) so 6.2 can pass a fake client. It defaults to `wicket_api_client()`.
+- **`ResultPage`** has public readonly `items` (raw `data[]` resources), `included`, `total`, `page`, `total_pages`, `per_page`, `tiers` and `unavailable`. Helpers: `is_empty()`, `first_number()` / `last_number()` for 3.5's "Displaying X–Y of N" (0 when empty), and `tiers_for($uuid)`. 2.6's `EntryMapper` reads `items` + `included`. Don't call `reset()` / `end()` on its array properties: they take a reference, and that fails on readonly properties.
+- **Empty pages.** `matches_nothing` returns `ResultPage::empty()` without an API call, so `unavailable` is false and 3.5 shows "no results". An API failure gives an empty page with `unavailable = true`, and 3.5 shows the alert. The page is 1 and `total_pages` is 0 in both cases.
+- **Page clamp.** If the requested page is past `meta.page.total_pages` (and there are results), the repository re-fetches the last page, which costs one extra request. It caches the result under the original key, so `ResultPage::$page` is the page actually shown. 3.5 should build pagination from it, not from `RequestParams::$page`.
+- **Cache.** One transient per query: `wicket_directory_` + `md5` of the cache format, directory ID, `cache_version`, language, the post's `post_modified_gmt`, the full stored config, and the endpoint + final `args`. The config and the modified date are in the key on purpose. Any save invalidates the cache, even a REST or code write that doesn't bump `cache_version` (only 5.1's save handler does), and even a save that changes nothing. Old entries aren't deleted; they expire with the TTL. The cached value is `ResultPage::to_array()` (plain arrays, not serialized objects); `CACHE_FORMAT` must be bumped if that shape changes.
+- **`wicket_directory/cache_ttl`** gets `($ttl, $config, $post)`; the default is 600. A value of 0 or less disables both reading and writing the cache. This matters because a transient set with 0 never expires.
+- **Failures** are logged as `Wicket()->log()->error()` with `['source' => 'wicket-directory', 'directory_id' => …]`, and they are never cached. This covers no client (`wicket_api_client()` returned false), a thrown exception (HTTP 4xx/5xx), a response without a `data` array, and an exception while building the query. On sites with WooCommerce the log is `uploads/wc-logs/wicket-directory-*.log`; otherwise it's `uploads/wicket-logs/`.
+- **Tiers.** When `card.membership_tier` is on and the page has items, the repository makes one `{person|organization}_memberships/query` request (`{entity}_uuid_in` + `status_eq: 'Active'`, `page[size]=2000`, `include=membership`). `tiers` is `uuid => list<{id, slug, name}>`, distinct and in response order. `name` is `name_{lang}`, then `name`, then `name_en`, then the slug. When `eligibility.membership_ids` is set, only those tiers are kept. Otherwise every active tier is kept, and that includes org-type tiers cascaded onto people (seen on staging, e.g. "Xyz Org Membership" on a person). 3.6 may want to hide those. If the tier request fails, the results still render without tiers, the error is logged, and the page isn't cached, so the next visit retries.
 
 <a id="25"></a>
 

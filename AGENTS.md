@@ -53,7 +53,7 @@ Block render_callback / ServerSideRender
       → load directory post (not `publish` → render nothing; notice in the editor)
       → Query\RequestParams      (landed) flat GET params prefixed `wd{ID}_…`; sort tokens from DirectoryType::sort_options()
       → Query\OrganizationQueryBuilder | PersonQueryBuilder (landed) → Query\DirectoryQuery (landed; path() + body(), or matches_nothing)
-      → DirectoryRepository (API + transient cache)
+      → Api\DirectoryRepository  (landed) builder by type → API + transient cache → Api\ResultPage (landed; `unavailable` on API failure)
       → EntryMapper + ContactResolver → DTOs
       → TemplateLoader → templates/ (theme can override at wicket-directory/…)
 ```
@@ -97,7 +97,7 @@ There is **one render path**. The frontend and the block editor preview both go 
 | `wicket_directory/entry`, `wicket_directory/entry_{slug}` (filter) | Modify one entry's data before its card renders |
 | `wicket_directory/before_render`, `wicket_directory/before_render_{slug}` (action) | Runs before the listing renders |
 | `wicket_directory/card_template` (filter) | Swap the card template file |
-| `wicket_directory/cache_ttl` (filter) | API response cache lifetime (default 10 min) |
+| `wicket_directory/cache_ttl` (filter) | (landed) API response cache lifetime in seconds (default 600). Gets `$ttl`, `DirectoryConfig`, the directory `WP_Post`. `0` disables the cache |
 
 ## Code Style
 
