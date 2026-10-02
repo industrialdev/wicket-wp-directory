@@ -19,7 +19,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | 1.2 | [Directory custom post type and config post meta](#12) | 1.1 | Done |
 | 1.3 | [DirectoryConfig value object and DirectoryType enum](#13) | 1.2 | Done |
 | 2.1 | [RequestParams: parse and sanitize visitor GET parameters](#21) | 1.3 | Done |
-| 2.2 | [OrganizationQueryBuilder for organizations/query](#22) | 0.1, 2.1 | To do |
+| 2.2 | [OrganizationQueryBuilder for organizations/query](#22) | 0.1, 2.1 | Done |
 | 2.3 | [PersonQueryBuilder for people/query](#23) | 0.1, 2.1 | To do |
 | 2.4 | [DirectoryRepository: execute queries with caching and error handling](#24) | 2.2, 2.3 | To do |
 | 2.5 | [ContactResolver: shared rules for address, email, phone and website](#25) | 0.1 | To do |
@@ -203,6 +203,17 @@ Add src/Query/OrganizationQueryBuilder.php that builds the Ransack payload.
 - Output matches the verified filters in api-queries.md.
 - Reproduces the CHFA template's query when configured the same way.
 - Unit tested for each combination of eligibility, keyword, location, facets and sort.
+
+**Outcome:** `src/Query/QueryBuilder.php` (abstract, shared), `src/Query/OrganizationQueryBuilder.php` and `src/Query/DirectoryQuery.php`. Unit tests are still ticket 6.2. Checked with `wp eval-file`: 21 offline assertions, plus live runs against the staging tenant (no conditions 19,933, active 10, `type_in: ['company']` 2,846; every no-match keyword, location, type and opt-in → 0; `legal_name_en` / `-legal_name_en` give A→Z / Z→A). Notes for later tickets:
+- `(new OrganizationQueryBuilder())->build($config, $params, $per_page, $slug = '', $lang = null)` returns a `DirectoryQuery`. It throws `InvalidArgumentException` if the config isn't an organization directory. `$lang` defaults to `wicket_get_current_language()`; anything that isn't two letters falls back to `en`, because it becomes part of `legal_name_{lang}`.
+- `$per_page` is clamped to 1–50 (`QueryBuilder::MIN_PER_PAGE` / `MAX_PER_PAGE`) as well as in 3.1. The page number is `RequestParams::$page`, uncapped.
+- `DirectoryQuery` has `endpoint`, `args` (`filter`, `page`, `sort`, `include`) and `matches_nothing`. 2.4 sends `wicket_api_client()->post($query->path(), ['json' => $query->body()])`. `path()` applies the base plugin's `page[0]` → `page[]` fix (the base plugin only has it inline, so the regex is repeated). `body()` sends an empty filter as `{}`. `args` is the natural input for 2.4's cache key.
+- **`matches_nothing`.** Ransack treats an empty `type_in: []` as blank and drops it, which would list every eligible org. So when the visitor's org types don't intersect `eligibility.org_types`, or a data-field facet sits on the opt-in field without the opt-in value selected, the builder returns `matches_nothing = true` and `body()` throws `LogicException`. **2.4 must check the flag and return an empty `ResultPage` without calling the API.** The filters don't run for such a query.
+- A facet on the opt-in field only narrows it: the opt-in condition always stays, so a facet can't widen eligibility.
+- Filter order: eligibility (`membership_entries_status_eq`, `membership_entries_membership_uuid_in`, `type_in`), `legal_name_{lang}_cont`, `g` (location OR group), `search_query` (opt-in, then data-field facets in config order). Empty conditions are left out.
+- **Hooks.** `wicket_directory/query_args`, then `wicket_directory/query_args_{slug}` (only when `$slug` isn't empty), each with `($args, $config, $params)`. A filter that returns a non-array is ignored. `{slug}` is the directory post's `post_name`; 3.2 passes it, and should use the same slug for the `entry_{slug}` and `before_render_{slug}` hooks.
+- **2.3** extends `QueryBuilder`. It implements `type()`, `endpoint()`, `filter()` and `sort_key()`, and reuses `location_group()` and `search_query()`. The org-type intersection stays in the org builder.
+- **CHFA parity.** The CHFA template isn't in this workspace (`wicket-child` has only the generic org template). That template differs on purpose: it puts `addresses_city_i_cont` at the top level and has no state OR, and it sends `''` for unset values. Compare against the real CHFA template in 7.2.
 
 <a id="23"></a>
 

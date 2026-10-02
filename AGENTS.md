@@ -52,7 +52,8 @@ Block render_callback / ServerSideRender
   → DirectoryRenderer
       → load directory post (not `publish` → render nothing; notice in the editor)
       → Query\RequestParams      (landed) flat GET params prefixed `wd{ID}_…`; sort tokens from DirectoryType::sort_options()
-      → Person|OrganizationQueryBuilder → DirectoryRepository (API + transient cache)
+      → Query\OrganizationQueryBuilder (landed) | PersonQueryBuilder → Query\DirectoryQuery (landed; path() + body(), or matches_nothing)
+      → DirectoryRepository (API + transient cache)
       → EntryMapper + ContactResolver → DTOs
       → TemplateLoader → templates/ (theme can override at wicket-directory/…)
 ```
@@ -92,7 +93,7 @@ There is **one render path**. The frontend and the block editor preview both go 
 
 | Hook | Purpose |
 |---|---|
-| `wicket_directory/query_args`, `wicket_directory/query_args_{slug}` (filter) | Modify the API query before it runs |
+| `wicket_directory/query_args`, `wicket_directory/query_args_{slug}` (filter) | (landed) Modify the API query before it runs. Gets `$args` (`filter`, `page`, `sort`, `include`), `DirectoryConfig`, `RequestParams`. `{slug}` is the directory post's slug |
 | `wicket_directory/entry`, `wicket_directory/entry_{slug}` (filter) | Modify one entry's data before its card renders |
 | `wicket_directory/before_render`, `wicket_directory/before_render_{slug}` (action) | Runs before the listing renders |
 | `wicket_directory/card_template` (filter) | Swap the card template file |
