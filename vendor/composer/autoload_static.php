@@ -23,6 +23,7 @@ class ComposerStaticInit4c522cd8c6e34158d00402cdfd4e188f
     public static $classMap = array (
         'Composer\\InstalledVersions' => __DIR__ . '/..' . '/composer/InstalledVersions.php',
         'Wicket\\Directory\\Plugin' => __DIR__ . '/../..' . '/src/Plugin.php',
+        'Wicket\\Directory\\PostType\\DirectoryPostType' => __DIR__ . '/../..' . '/src/PostType/DirectoryPostType.php',
     );
 
     public static function getInitializer(ClassLoader $loader)

@@ -8,4 +8,5 @@ $baseDir = dirname($vendorDir);
 return array(
     'Composer\\InstalledVersions' => $vendorDir . '/composer/InstalledVersions.php',
     'Wicket\\Directory\\Plugin' => $baseDir . '/src/Plugin.php',
+    'Wicket\\Directory\\PostType\\DirectoryPostType' => $baseDir . '/src/PostType/DirectoryPostType.php',
 );

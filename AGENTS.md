@@ -36,7 +36,7 @@ Tests live in the shared QA suite at `../../../../../../qa/`, never in this repo
 wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-base-plugin, PHP 8.3; WICKET_DIRECTORY_* constants
   dependency guard               (landed) function_exists('Wicket') → else admin notice + early return; activation hook checks PHP + base
   Plugin::get_instance()         (landed) singleton; plugin_setup() on plugins_loaded:100 (after the base plugin's :99 setup); text domain
-    DirectoryPostType            CPT `wicket_directory` + `_wicket_directory_config` post meta
+    DirectoryPostType            (landed) CPT `wicket_directory` (caps → manage_options, classic editor) + `_wicket_directory_config` post meta (REST `edit` context only)
     DirectoryMetaBoxes           classic edit screen (block editor disabled for this CPT)
     DirectoryBlock               dynamic block `wicket/directory` → DirectoryRenderer
 ```

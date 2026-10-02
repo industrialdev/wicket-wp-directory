@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Wicket\Directory;
 
+use Wicket\Directory\PostType\DirectoryPostType;
+
 /**
  * Main plugin class.
  *
@@ -67,5 +69,7 @@ final class Plugin
             false,
             dirname(WICKET_DIRECTORY_BASENAME) . '/languages'
         );
+
+        (new DirectoryPostType())->register();
     }
 }

@@ -1,7 +1,7 @@
 ---
 title: "MVP Tickets"
 audience: [developer, agent]
-updated: 2026-09-30
+updated: 2026-10-02
 ---
 
 # `wicket-wp-directory` MVP tickets
@@ -16,7 +16,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 |---|---|---|---|
 | 0.1 | [API spike: verify MDP query filters for people and organizations](#01) | — | Done |
 | 1.1 | [Plugin scaffold: main file, composer, bootstrap, dependency guard](#11) | — | Done |
-| 1.2 | [Directory custom post type and config post meta](#12) | 1.1 | To do |
+| 1.2 | [Directory custom post type and config post meta](#12) | 1.1 | Done |
 | 1.3 | [DirectoryConfig value object and DirectoryType enum](#13) | 1.2 | To do |
 | 2.1 | [RequestParams: parse and sanitize visitor GET parameters](#21) | 1.3 | To do |
 | 2.2 | [OrganizationQueryBuilder for organizations/query](#22) | 0.1, 2.1 | To do |
@@ -106,6 +106,11 @@ Add src/PostType/DirectoryPostType.php.
 - "Directories" menu appears for admins only.
 - Edit screen uses the classic editor with Draft/Publish.
 - Meta is readable via the REST API for users who can edit directories, and not exposed publicly.
+
+**Outcome:** `src/PostType/DirectoryPostType.php`, registered from `Plugin::plugin_setup()`. Notes for later tickets:
+- The CPT also supports `custom-fields`, because the REST posts controller only adds `meta` to responses when it does. The generic Custom Fields meta box is removed from the edit screen.
+- WordPress serves published posts of any `show_in_rest` type to anyone in the `view` context. The config meta's schema is therefore `context: ['edit']`. The `edit` context needs the CPT's `edit_posts` capability (`manage_options`), so the config never appears in public or editor responses. The meta is also `revisions_enabled`.
+- The meta REST schema lists only the top-level keys (`type`, `eligibility`, `card`, `facets`, `cache_version`), with nested objects left open (`additionalProperties: true`). Core strips any object property not declared in the schema, so a new top-level config key must be added there too. The `sanitize_callback` only coerces to an array; ticket 1.3 should route it through `DirectoryConfig::sanitize()`.
 
 <a id="13"></a>
 
@@ -449,6 +454,8 @@ package.json with build/start scripts.
 - Changing any option updates the preview.
 - Draft directories can't be picked; an existing selection that became Draft shows a warning.
 - npm run build produces build/directory.
+
+**Note from 1.2:** `useEntityRecords('postType', …)` requests `context=edit` by default, and that context needs `manage_options` for this CPT. Pass `context: 'view'` so editors (who place blocks but aren't admins) can list directories. The directory's `type` (needed for the Default Sort options) lives in the config meta, which is edit-context only. Editors can't read it, so expose `type` separately in the `view` context (e.g. `register_rest_field` or a small extra meta key) before building the sidebar.
 
 ## 5. Admin screens
 
