@@ -54,7 +54,9 @@ Block render_callback / ServerSideRender
       → Query\RequestParams      (landed) flat GET params prefixed `wd{ID}_…`; sort tokens from DirectoryType::sort_options()
       → Query\OrganizationQueryBuilder | PersonQueryBuilder (landed) → Query\DirectoryQuery (landed; path() + body(), or matches_nothing)
       → Api\DirectoryRepository  (landed) builder by type → API + transient cache → Api\ResultPage (landed; `unavailable` on API failure)
-      → EntryMapper + Data\ContactResolver (landed; static resolve(field, records, rule), the truth table) → DTOs
+      → Data\EntryMapper (landed; map(page, config, slug, lang) → Data\PersonEntry | Data\OrganizationEntry, immutable, raw values, empty = hidden)
+          uses Data\ContactResolver (landed; static resolve(field, records, rule), the truth table)
+          and Data\EnumLabels (landed; enum-key + org-type labels, one load per source per request)
       → TemplateLoader → templates/ (theme can override at wicket-directory/…)
 ```
 
@@ -94,7 +96,7 @@ There is **one render path**. The frontend and the block editor preview both go 
 | Hook | Purpose |
 |---|---|
 | `wicket_directory/query_args`, `wicket_directory/query_args_{slug}` (filter) | (landed) Modify the API query before it runs. Gets `$args` (`filter`, `page`, `sort`, `include`), `DirectoryConfig`, `RequestParams`. `{slug}` is the directory post's slug |
-| `wicket_directory/entry`, `wicket_directory/entry_{slug}` (filter) | Modify one entry's data before its card renders |
+| `wicket_directory/entry`, `wicket_directory/entry_{slug}` (filter) | (landed) Modify one entry's data before its card renders. Gets the entry's `to_array()`, the raw API resource and `DirectoryConfig`; returns the array. Unknown keys are dropped and wrong-typed values keep the original; custom data goes under `extra` |
 | `wicket_directory/before_render`, `wicket_directory/before_render_{slug}` (action) | Runs before the listing renders |
 | `wicket_directory/card_template` (filter) | Swap the card template file |
 | `wicket_directory/cache_ttl` (filter) | (landed) API response cache lifetime in seconds (default 600). Gets `$ttl`, `DirectoryConfig`, the directory `WP_Post`. `0` disables the cache |

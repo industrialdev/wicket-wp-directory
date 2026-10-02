@@ -303,7 +303,21 @@ All four record types are included with `include=emails,phones,addresses,web_add
 
 Each entry in `attributes.data_fields[]` has `$schema` (`urn:uuid:…`), `key` (the schema slug used in `search_query`), `schema_slug`, `version`, `value` (an object keyed by field) and `valid`.
 
-Read a field as the item where `key === $schema_key`, then `value[$field]`. Values can be strings, booleans or arrays of enum keys. Convert enum keys to labels with `wicket_get_schemas_options()`.
+Read a field as the item where `key === $schema_key`, then `value[$field]`. Values can be strings, booleans or arrays of enum keys. Convert enum keys to labels with `wicket_get_schemas_options()`. It misses the schema's own `enumNames` and reads only the site language, so `EnumLabels` fills the gaps (see ticket 2.6's outcome).
+
+### Finding schema keys and fields
+
+Since base plugin 2.7.12, a WP admin (`manage_options`) can open **`/?mdp_schemas`** on any stack site. It lists the tenant's JSON schemas, grouped by resource type. `/?mdp_schemas&schema=<uuid|slug|key>` shows one schema as JSON. Look up the reference parts there:
+
+- the **schema key** (`attributes.key`) is the config's `schema_key`;
+- a property under `attributes.schema.properties` is the config's `field`;
+- `enum` / `items.enum` holds the enum keys, and `enumNames` / `ui_schema.{field}.ui:i18n.enumNames.{lang}` holds their labels.
+
+It's an admin tool (`WicketWP\SchemaInspector`, all methods private), not an API: plugin code keeps using `wicket_get_schemas()`. The list is cached for 5 minutes; add `&mdp_schemas_refresh=1` after changing a schema in the MDP.
+
+### `json_schemas` isn't paged
+
+Verified 2026-10-02 on staging (11 schemas): `GET json_schemas` ignores `page[size]` and `page[number]`, whether they're sent as Guzzle `query` options or in the query string. It returns no `meta.page` and no `links`, and it gave all 11 schemas even with `page[size]=1`. So the unpaged `wicket_get_schemas()` gets every schema. The inspector's paging loop is harmless but not needed.
 
 ## Rejected predicates (silently ignored)
 

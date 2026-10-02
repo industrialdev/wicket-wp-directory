@@ -255,11 +255,13 @@ abstract class QueryBuilder
     /**
      * A two-letter language code; it becomes part of MDP keys like `legal_name_en`.
      *
+     * EntryMapper uses it too, so attribute names match the query's.
+     *
      * @param mixed $lang Raw code.
      *
-     * @return string
+     * @return string DEFAULT_LANGUAGE when the code isn't two letters.
      */
-    private static function language(mixed $lang): string
+    public static function language(mixed $lang): string
     {
         $lang = is_string($lang) ? strtolower($lang) : '';
 
