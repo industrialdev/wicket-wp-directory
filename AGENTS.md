@@ -52,7 +52,7 @@ Block render_callback / ServerSideRender
   → DirectoryRenderer
       → load directory post (not `publish` → render nothing; notice in the editor)
       → Query\RequestParams      (landed) flat GET params prefixed `wd{ID}_…`; sort tokens from DirectoryType::sort_options()
-      → Query\OrganizationQueryBuilder (landed) | PersonQueryBuilder → Query\DirectoryQuery (landed; path() + body(), or matches_nothing)
+      → Query\OrganizationQueryBuilder | PersonQueryBuilder (landed) → Query\DirectoryQuery (landed; path() + body(), or matches_nothing)
       → DirectoryRepository (API + transient cache)
       → EntryMapper + ContactResolver → DTOs
       → TemplateLoader → templates/ (theme can override at wicket-directory/…)

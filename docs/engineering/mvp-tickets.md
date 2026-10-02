@@ -20,7 +20,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | 1.3 | [DirectoryConfig value object and DirectoryType enum](#13) | 1.2 | Done |
 | 2.1 | [RequestParams: parse and sanitize visitor GET parameters](#21) | 1.3 | Done |
 | 2.2 | [OrganizationQueryBuilder for organizations/query](#22) | 0.1, 2.1 | Done |
-| 2.3 | [PersonQueryBuilder for people/query](#23) | 0.1, 2.1 | To do |
+| 2.3 | [PersonQueryBuilder for people/query](#23) | 0.1, 2.1 | Done |
 | 2.4 | [DirectoryRepository: execute queries with caching and error handling](#24) | 2.2, 2.3 | To do |
 | 2.5 | [ContactResolver: shared rules for address, email, phone and website](#25) | 0.1 | To do |
 | 2.6 | [EntryMapper and entry DTOs](#26) | 2.4, 2.5 | To do |
@@ -235,6 +235,13 @@ See wicket-wp-admin-org-roster/src/Services/MdpClient.php searchPersons() for a 
 
 - Output matches the verified filters in api-queries.md.
 - Unit tested for each combination.
+
+**Outcome:** `src/Query/PersonQueryBuilder.php`, extending `QueryBuilder`. Unit tests are still ticket 6.2. Checked with `wp eval-file`: 36 offline assertions, plus live runs against the staging tenant. The live totals match api-queries.md: no conditions 161, active 41, active + keyword "a" 27, one tier 7 active / 11 any status, a real `identifying_number` → 1, every no-match keyword, location, tier and opt-in → 0, and all four sorts give distinct orders. Notes for later tickets:
+- `(new PersonQueryBuilder())->build($config, $params, $per_page, $slug = '', $lang = null)` has the same contract as the org builder. It returns a `DirectoryQuery` for `people/query`, and it throws `InvalidArgumentException` for a non-individual config. `$lang` isn't used for people: names aren't translated.
+- Filter order: `membership_people_status_eq`, `membership_people_membership_uuid_in`, then `g` (the keyword OR group first, then the location OR group, each only when set), then `search_query` (opt-in, then data-field facets). The two groups are ANDed.
+- Sort tokens map to `given_name` / `-given_name` (`first_name_asc|desc`) and `family_name` / `-family_name` (`last_name_asc|desc`).
+- `matches_nothing` can only come from the opt-in/facet conflict here: individual configs have no org types, and `DirectoryConfig` drops org-type facets on them. 2.4 still checks the flag the same way for both builders.
+- 2.4 can pick the builder from `$config->type`: `DirectoryType::Individual` → `PersonQueryBuilder`, `Organization` → `OrganizationQueryBuilder`.
 
 <a id="24"></a>
 
