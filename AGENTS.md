@@ -2,7 +2,7 @@
 
 Wicket Directory adds configurable public directories of **Individuals** and **Organizations** from the Wicket member data platform (MDP). Visitors can search, filter, sort and page through them. Admins set up a directory once in WP Admin and place it on any page with the **Wicket Directory** Gutenberg block. It replaces the per-client member-directory page templates that used to live in child themes.
 
-> **Status: pre-implementation.** The approved plan is `docs/engineering/mvp-plan.md`. Read it before writing code; it is the source of truth for scope, data model and decisions. Classes and paths below are the planned layout. Update this file as they land.
+> **Status: in development (scaffold landed).** The approved plan is `docs/engineering/mvp-plan.md`. Read it before writing code; it is the source of truth for scope, data model and decisions. Classes and paths below are the planned layout unless marked as landed. Update this file as they land.
 
 MVP scope: Individual and Organization directories only. These are deferred to phase 2, so don't build them without being asked:
 - Groups directories and group rosters
@@ -10,9 +10,9 @@ MVP scope: Individual and Organization directories only. These are deferred to p
 - the Developer panel UI
 - the `[col]/{{field}}` merge-tag card editor
 
-## Commands (planned)
+## Commands
 
-`composer.json` and `package.json` don't exist yet. These scripts arrive with the scaffold (plan step 1) and follow the sibling plugins' conventions.
+The composer scripts exist (ticket 1.1). `package.json` and the npm scripts arrive with the block editor build (ticket 4.1). Composer isn't installed on the host: run it in the stack's PHP container (`docker exec -w /var/www/html/web/app/plugins/wicket-wp-directory wicket-wp-stack-php-1 composer …`).
 
 ```bash
 composer install          # Install dependencies (including dev)
@@ -33,9 +33,9 @@ Tests live in the shared QA suite at `../../../../../../qa/`, never in this repo
 ### Bootstrap
 
 ```
-wicket-wp-directory.php         header: Requires Plugins: wicket-wp-base-plugin, PHP 8.3
-  Plugin::get_instance()         singleton; plugin_setup() on plugins_loaded
-    dependency guard             admin notice + early return if the base plugin is inactive
+wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-base-plugin, PHP 8.3; WICKET_DIRECTORY_* constants
+  dependency guard               (landed) function_exists('Wicket') → else admin notice + early return; activation hook checks PHP + base
+  Plugin::get_instance()         (landed) singleton; plugin_setup() on plugins_loaded:100 (after the base plugin's :99 setup); text domain
     DirectoryPostType            CPT `wicket_directory` + `_wicket_directory_config` post meta
     DirectoryMetaBoxes           classic edit screen (block editor disabled for this CPT)
     DirectoryBlock               dynamic block `wicket/directory` → DirectoryRenderer

@@ -15,7 +15,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | ID | Ticket | Depends on | Status |
 |---|---|---|---|
 | 0.1 | [API spike: verify MDP query filters for people and organizations](#01) | — | Done |
-| 1.1 | [Plugin scaffold: main file, composer, bootstrap, dependency guard](#11) | — | To do |
+| 1.1 | [Plugin scaffold: main file, composer, bootstrap, dependency guard](#11) | — | Done |
 | 1.2 | [Directory custom post type and config post meta](#12) | 1.1 | To do |
 | 1.3 | [DirectoryConfig value object and DirectoryType enum](#13) | 1.2 | To do |
 | 2.1 | [RequestParams: parse and sanitize visitor GET parameters](#21) | 1.3 | To do |
