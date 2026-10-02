@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Wicket\Directory\PostType;
 
+use Wicket\Directory\Config\DirectoryConfig;
+use Wicket\Directory\Config\DirectoryType;
+
 /**
  * The `wicket_directory` post type and its config post meta.
  *
@@ -171,7 +174,7 @@ final class DirectoryPostType
             'properties'           => [
                 'type'          => [
                     'type' => 'string',
-                    'enum' => ['individual', 'organization'],
+                    'enum' => DirectoryType::values(),
                 ],
                 'eligibility'   => $open_object,
                 'card'          => $open_object,
@@ -190,13 +193,19 @@ final class DirectoryPostType
     /**
      * Sanitize the config before it is stored.
      *
+     * This runs on every write (meta boxes, REST, code), but WordPress doesn't
+     * pass the post ID, so the stored config isn't known here. The type-change
+     * reset and the cache_version bump therefore happen in the save handler,
+     * which calls DirectoryConfig::sanitize() with the previous config first.
+     * Sanitizing again here is a no-op for that result.
+     *
      * @param mixed $value Raw meta value.
      *
      * @return array<string, mixed>
      */
     public function sanitize_meta(mixed $value): array
     {
-        return is_array($value) ? $value : [];
+        return DirectoryConfig::sanitize(is_array($value) ? $value : [])->to_array();
     }
 
     /**

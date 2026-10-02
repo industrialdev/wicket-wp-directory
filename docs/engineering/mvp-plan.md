@@ -2,7 +2,7 @@
 title: "MVP Plan"
 audience: [developer, agent]
 status: approved
-updated: 2026-09-30
+updated: 2026-10-02
 ---
 
 > Implementation plan for the MVP (Individual + Organization directories). Source files referenced below don't exist yet; they are the planned layout. Update this doc as decisions change.
@@ -68,7 +68,7 @@ src/
   Plugin.php
   PostType/DirectoryPostType.php     CPT + register_post_meta('_wicket_directory_config', show_in_rest schema)
   Config/DirectoryType.php           enum: Individual | Organization
-  Config/DirectoryConfig.php         typed value object: defaults(), fromPost(), sanitize(array)
+  Config/DirectoryConfig.php         typed value object: defaults(), from_post(), sanitize(array, ?previous)
   Admin/DirectoryMetaBoxes.php       meta boxes + save (nonce, manage_options) ; views in src/Admin/views/*.php
   Admin/ListColumns.php              Type and Status columns
   Query/RequestParams.php            parse + sanitize GET (namespaced per directory), clamp page
@@ -93,7 +93,7 @@ assets/js/directory.js    (tiny: mobile collapse default; Alpine comes from them
 
 ## Directory config (one post-meta array)
 
-The config below is the prototype's model trimmed to Individual and Organization. `DirectoryConfig` owns the defaults and sanitization. If an admin changes the type, the card and facet settings reset, as they do in the prototype.
+The config below is the prototype's model trimmed to Individual and Organization. `DirectoryConfig` owns the defaults and sanitization. If an admin changes the type, the card and facet settings reset, as they do in the prototype. The membership tiers reset too, because they're typed. The exact stored shape is documented in ticket 1.3's outcome.
 
 - **`type`:** `individual` or `organization`.
 - **`eligibility`** decides which records can appear. These conditions are built into the base API query, not shown as visitor filters.

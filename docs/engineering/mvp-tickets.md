@@ -17,7 +17,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | 0.1 | [API spike: verify MDP query filters for people and organizations](#01) | — | Done |
 | 1.1 | [Plugin scaffold: main file, composer, bootstrap, dependency guard](#11) | — | Done |
 | 1.2 | [Directory custom post type and config post meta](#12) | 1.1 | Done |
-| 1.3 | [DirectoryConfig value object and DirectoryType enum](#13) | 1.2 | To do |
+| 1.3 | [DirectoryConfig value object and DirectoryType enum](#13) | 1.2 | Done |
 | 2.1 | [RequestParams: parse and sanitize visitor GET parameters](#21) | 1.3 | To do |
 | 2.2 | [OrganizationQueryBuilder for organizations/query](#22) | 0.1, 2.1 | To do |
 | 2.3 | [PersonQueryBuilder for people/query](#23) | 0.1, 2.1 | To do |
@@ -110,7 +110,7 @@ Add src/PostType/DirectoryPostType.php.
 **Outcome:** `src/PostType/DirectoryPostType.php`, registered from `Plugin::plugin_setup()`. Notes for later tickets:
 - The CPT also supports `custom-fields`, because the REST posts controller only adds `meta` to responses when it does. The generic Custom Fields meta box is removed from the edit screen.
 - WordPress serves published posts of any `show_in_rest` type to anyone in the `view` context. The config meta's schema is therefore `context: ['edit']`. The `edit` context needs the CPT's `edit_posts` capability (`manage_options`), so the config never appears in public or editor responses. The meta is also `revisions_enabled`.
-- The meta REST schema lists only the top-level keys (`type`, `eligibility`, `card`, `facets`, `cache_version`), with nested objects left open (`additionalProperties: true`). Core strips any object property not declared in the schema, so a new top-level config key must be added there too. The `sanitize_callback` only coerces to an array; ticket 1.3 should route it through `DirectoryConfig::sanitize()`.
+- The meta REST schema lists only the top-level keys (`type`, `eligibility`, `card`, `facets`, `cache_version`), with nested objects left open (`additionalProperties: true`). Core strips any object property not declared in the schema, so a new top-level config key must be added there too. The `sanitize_callback` routes through `DirectoryConfig::sanitize()` (ticket 1.3).
 
 <a id="13"></a>
 
@@ -127,13 +127,27 @@ Config shape (see plan "Directory config"):
 - facets: [{source: data_field|org_type, schema_key, field, label}]
 - cache_version
 
-Methods: defaults(type), fromPost(post), sanitize(array). Changing type resets card and facet settings. cache_version increments on every save.
+Methods: defaults(type), from_post(post), sanitize(array). Changing type resets card and facet settings. cache_version increments on every save.
 
 **Acceptance criteria:**
 
 - sanitize() never trusts input: unknown keys dropped, types coerced, enums validated.
 - Type change resets card/facets to that type's defaults.
 - Covered by unit tests (see the unit tests ticket).
+
+**Outcome:** `src/Config/DirectoryType.php` and `src/Config/DirectoryConfig.php`. `DirectoryPostType::sanitize_meta()` and the meta REST schema's `type` enum now use them. Unit tests are still ticket 6.2. Notes for later tickets:
+- Methods are snake_case like the rest of the stack: `defaults(DirectoryType)`, `from_post(WP_Post|int): ?self` (null when the post isn't a directory), `sanitize(array $input, ?self $previous = null)`, `to_array()`. Properties are public readonly: `type`, `eligibility`, `card`, `facets`, `cache_version`. Every key is always present, so consumers don't need `isset()`. The array shapes are the `@phpstan-type`s at the top of `DirectoryConfig`.
+- **Type reset and cache bump need `$previous`.** WordPress doesn't pass the post ID to a meta `sanitize_callback`, so the callback sanitizes statelessly (idempotent; no reset, no bump). The save handler (5.1) must call `DirectoryConfig::sanitize($input, DirectoryConfig::from_post($post))` and store `->to_array()`. Writes through REST or code keep the `cache_version` they send, so cached results last until the TTL.
+- A type change also clears `eligibility.membership_ids`, not only the card and facets. Tiers are typed, so 5.1 would hide the old ones while they kept filtering. The 5.1 warning should mention tiers.
+- Shapes:
+  - Data-field references are `{schema_key, field}`. Both are set or both are `''`, and empty means off. They allow `[A-Za-z0-9_-]` only: case is kept for camelCase fields, and dots are rejected because the values become `search_query` path segments.
+  - `card.{address,email,phone,website}` are `{show, type, only_directory, only_primary}`, where `type` is `any` or a resource-type slug. `website.only_primary` is always false.
+  - `card.address_format` is one of `DirectoryConfig::ADDRESS_FORMATS` (default `full`). `card.website_label` is button text (`''` means the template's default).
+  - `card.post_nominal`, `profile_image`, `logo` and `eyebrow` are single data-field references. `card.tag_chips` is a list of them.
+  - `eligibility.opt_in` is `null` or `{schema_key, field, value}`. An empty value disables it, because the MDP ignores `''`. `"true"`/`"false"` become booleans.
+  - Facets with an invalid source are dropped, and so are duplicates. `org_type` facets are allowed on organization directories only.
+- A missing boolean keeps its default (e.g. `require_active_membership` stays true). Meta-box checkboxes must submit a hidden `0` so unticking them saves.
+- Card defaults: individual shows job title and address only. Personal email, phone and website are off by default. Organization shows org type, description, address, email, phone and website. Member ID and tier are off for both, because the tier needs an extra request per page.
 
 ## 2. Query & data layer
 
