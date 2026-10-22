@@ -11,6 +11,8 @@
 	--wd-search-icon-space: var(--spacing-500, 2.5rem);
 	--wd-filters-gap: var(--spacing-100, 0.5rem);
 	--wd-filters-option-gap: var(--spacing-150, 0.75rem);
+	--wd-results-gap: var(--spacing-200, 1rem);
+	--wd-sort-gap: var(--spacing-150, 0.75rem);
 }
 
 /* Alpine-only controls stay hidden until Alpine runs (the Wicket theme has this rule; others may not). */
@@ -147,4 +149,41 @@
 	.wicket-directory .wicket-directory__filters-toggle {
 		display: none;
 	}
+}
+
+/* Results header: [Displaying X–Y of N results] … [Order by ▾] */
+
+.wicket-directory__results-header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--wd-results-gap);
+	margin-block-end: var(--wd-results-gap);
+}
+
+.wicket-directory__count {
+	margin: 0;
+	font-weight: bold;
+}
+
+.wicket-directory__sort {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--wd-sort-gap);
+}
+
+.wicket-directory__sort .wicket-directory__sort-label {
+	margin: 0;
+}
+
+.wicket-directory__pagination,
+.wicket-directory__no-results,
+.wicket-directory__unavailable {
+	margin-block-start: var(--wd-results-gap);
+}
+
+.wicket-directory__no-results-title {
+	font-weight: bold;
 }

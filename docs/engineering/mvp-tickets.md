@@ -29,7 +29,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | 3.2 | [DirectoryRenderer and TemplateLoader (single render path)](#32) | 3.1, 2.6, 2.7 | Done |
 | 3.3 | [Search bar template (keyword + location)](#33) | 3.2 | Done |
 | 3.4 | [Refine Results filters template](#34) | 3.2 | Done |
-| 3.5 | [Results header, Order by and pagination](#35) | 3.2 | To do |
+| 3.5 | [Results header, Order by and pagination](#35) | 3.2 | Done |
 | 3.6 | [Individual card template](#36) | 3.2 | To do |
 | 3.7 | [Organization card template](#37) | 3.2 | To do |
 | 3.8 | [Directory CSS (Wicket theme tokens) and JS](#38) | 3.2 | To do |
@@ -497,6 +497,16 @@ templates/parts/results-header.php, pagination.php, no-results.php.
 
 - Paging keeps keyword, location, facets and sort.
 - Works with and without the Wicket theme's pagination helper.
+
+**Outcome:** `templates/parts/results-header.php`, `templates/parts/pagination.php`, `templates/parts/no-results.php` and their rules in `assets/css/directory.css`. No renderer change: `directory.php` already loaded the three parts. Unit tests: `qa/tests/Unit/Directory/ResultsHeaderTest.pest.php` (8), `PaginationTest.pest.php` (6) and `NoResultsTest.pest.php` (5), plus 3 in `DirectoryRendererTest` (its fake API's page meta is now `$this->pageMeta`, and it stubs `number_format_i18n`). Checked with `render_block()` on the stack (Wicket child theme) against directory 1818: the count, the selected sort, and the theme's page links keep `page_id`, keyword, location, sort, array facet params and another directory's `wd7_pg`; core `paginate_links()` with the part's args gives the same URLs; a keyword that matches nobody gives the no-results message with its hint and no header or page links. The core fallback branch was only unit tested, because the theme's helper can't be undefined in one process. Not checked in a browser. Notes for later tickets:
+- **Results header.** `div.wicket-directory__results-header` → `p.wicket-directory__count` ("Displaying X–Y of N results", `_n()` on the total, numbers through `number_format_i18n()`) → `div.wicket-directory__sort.form` (label "Order by" and `select#wd{ID}_sort.wicket-directory__sort-select`, `name` `wd{ID}_sort`, options from `DirectoryType::sort_options()` with `RequestParams::$sort` selected). The header isn't rendered for an empty or unavailable page. Hide Order By drops the select and keeps the count; the block's default sort still applies.
+- **Sort submit.** The select is a field of the directory form, so a sort keeps the search and filters, and drops `wd{ID}_pg` (back to page 1). `onchange="this.form.submit()"`, like the theme's listing block, so it works without Alpine and covers 3.3's case where no Search or Apply button exists. No-JS visitors get a Sort `button` (`secondary`, `type=submit`) inside `<noscript>`.
+- **Pagination.** `div.wicket-directory__pagination`, only when `total_pages` is 2 or more. Args are `base` = `add_query_arg('wd{ID}_pg', '%#%')` on the current URL, `format` `''`, `total` and `current` from `ResultPage` (so a page past the end shows the last page's links). `paginate_links()` adds the URL's other query vars itself. With the theme, `wicket_pagination()` gets exactly those args: don't pass `type`, because its helper implodes an array and breaks on `plain`. Without it, `paginate_links()` (`type` `plain`, our own translated Previous / Next with Font Awesome arrows) is wrapped in the same `nav.wicket-pagination[aria-label]`, so `pagination.scss` matches.
+- **Editor preview.** A `paginate_links` filter, added only around the call, points every link at `#` (the REST request's URL isn't the page's), like `clear_url`. Its callback isn't a `static` closure, because Brain Monkey can't name one in `add_filter()`.
+- **No results.** `div.wicket-directory__no-results` with "No results found." and, when the visitor has a keyword, location or facet, a hint to change the search. An `unavailable` page gets `div.wicket-directory__unavailable` with the `alert` component instead (escaped content).
+- **CSS.** New tokens `--wd-results-gap` (`--spacing-200`) and `--wd-sort-gap` (`--spacing-150`). The header is a wrapping flex row (count left, Order by right).
+- **4.1:** wrap the `ServerSideRender` canvas in `Disabled`. Otherwise Order by's `onchange`, and 3.3/3.4's Search and Apply Filters, submit the directory form inside the editor.
+- **3.8:** fold the `--wd-results-*` / `--wd-sort-*` properties into the token layer, and style `.wicket-pagination` on non-Wicket themes (it has no rules there). The theme's own prev/next text carries Tailwind classes; that's the theme's markup, not ours.
 
 <a id="36"></a>
 
