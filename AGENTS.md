@@ -26,7 +26,14 @@ php -l <file>             # Quick PHP syntax check
 
 `build/` is kept in the repo because releases don't run a JS build. Rebuild after any change under `blocks/`.
 
-Tests live in the shared QA suite at `../../../../../../qa/`, never in this repo. Read `qa/README.md` and `qa/AGENTS.md` before adding any.
+Tests live in the shared QA suite at `../../../../../../qa/`, never in this repo. See [Tests](#tests). Read `qa/README.md` and `qa/AGENTS.md` before adding any.
+
+## Tests
+
+**Every time you write or change code, write unit tests for it in the same task.** A change without tests isn't done, however small it is.
+
+- **No Browser tests** Don't write browser tests for now.
+- **Run them** with `wicket test unit:directory` before handing off. If any fail, report the output.
 
 ## Architecture (planned)
 
