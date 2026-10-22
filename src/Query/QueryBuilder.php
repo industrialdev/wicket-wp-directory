@@ -228,28 +228,33 @@ abstract class QueryBuilder
      */
     private function apply_filters(array $args, DirectoryConfig $config, RequestParams $params, string $slug): array
     {
-        $hooks = ['wicket_directory/query_args'];
+        // Literal hook names, so `grep` and Atlas (ATLAS003) find both hooks.
 
-        if ($slug !== '') {
-            $hooks[] = 'wicket_directory/query_args_' . $slug;
+        /**
+         * Modify a directory's MDP query before it runs.
+         *
+         * @param array           $args   `filter` (JSON body), `sort`, `page` and `include` (query string).
+         * @param DirectoryConfig $config The directory's config.
+         * @param RequestParams   $params The visitor's sanitized choices.
+         */
+        $filtered = apply_filters('wicket_directory/query_args', $args, $config, $params);
+
+        if (is_array($filtered)) {
+            $args = $filtered;
         }
 
-        foreach ($hooks as $hook) {
-            /**
-             * Modify a directory's MDP query before it runs.
-             *
-             * @param array           $args   `filter` (JSON body), `sort`, `page` and `include` (query string).
-             * @param DirectoryConfig $config The directory's config.
-             * @param RequestParams   $params The visitor's sanitized choices.
-             */
-            $filtered = apply_filters($hook, $args, $config, $params);
-
-            if (is_array($filtered)) {
-                $args = $filtered;
-            }
+        if ($slug === '') {
+            return $args;
         }
 
-        return $args;
+        /**
+         * Modify one directory's MDP query; runs after wicket_directory/query_args.
+         *
+         * `{slug}` is the directory post's slug. Same arguments.
+         */
+        $filtered = apply_filters("wicket_directory/query_args_{$slug}", $args, $config, $params);
+
+        return is_array($filtered) ? $filtered : $args;
     }
 
     /**

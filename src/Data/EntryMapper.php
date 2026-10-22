@@ -207,34 +207,39 @@ final class EntryMapper
      */
     private function apply_filters(Entry $entry, array $item, DirectoryConfig $config, string $slug): Entry
     {
-        $hooks = ['wicket_directory/entry'];
+        // Literal hook names, so `grep` and Atlas (ATLAS003) find both hooks.
 
-        if ($slug !== '') {
-            $hooks[] = 'wicket_directory/entry_' . $slug;
+        /**
+         * Modify one entry's data before its card renders.
+         *
+         * Values are raw; templates escape them. Change a key to change the card,
+         * empty it to hide that row, or put custom data under `extra` for a theme
+         * template override. Unknown keys are dropped, and a value of the wrong
+         * type keeps the original.
+         *
+         * @param array           $data   PersonEntry or OrganizationEntry::to_array().
+         * @param array           $item   The raw `people` / `organizations` resource, with
+         *                                `attributes` (including `data_fields`).
+         * @param DirectoryConfig $config The directory's config.
+         */
+        $filtered = apply_filters('wicket_directory/entry', $entry->to_array(), $item, $config);
+
+        if (is_array($filtered)) {
+            $entry = $entry->with($filtered);
         }
 
-        foreach ($hooks as $hook) {
-            /**
-             * Modify one entry's data before its card renders.
-             *
-             * Values are raw; templates escape them. Change a key to change the card,
-             * empty it to hide that row, or put custom data under `extra` for a theme
-             * template override. Unknown keys are dropped, and a value of the wrong
-             * type keeps the original.
-             *
-             * @param array           $data   PersonEntry or OrganizationEntry::to_array().
-             * @param array           $item   The raw `people` / `organizations` resource, with
-             *                                `attributes` (including `data_fields`).
-             * @param DirectoryConfig $config The directory's config.
-             */
-            $filtered = apply_filters($hook, $entry->to_array(), $item, $config);
-
-            if (is_array($filtered)) {
-                $entry = $entry->with($filtered);
-            }
+        if ($slug === '') {
+            return $entry;
         }
 
-        return $entry;
+        /**
+         * Modify one directory's entry data; runs after wicket_directory/entry.
+         *
+         * `{slug}` is the directory post's slug. Same arguments.
+         */
+        $filtered = apply_filters("wicket_directory/entry_{$slug}", $entry->to_array(), $item, $config);
+
+        return is_array($filtered) ? $entry->with($filtered) : $entry;
     }
 
     /**
