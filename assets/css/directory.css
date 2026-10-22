@@ -1,0 +1,63 @@
+/**
+ * Wicket Directory block styles.
+ *
+ * Sizes come from Wicket theme tokens, each with a fallback for other themes,
+ * through the --wd-* layer on .wicket-directory.
+ */
+
+.wicket-directory {
+	--wd-search-gap: var(--spacing-100, 0.5rem);
+	--wd-search-icon-inset: var(--spacing-200, 1rem);
+	--wd-search-icon-space: var(--spacing-500, 2.5rem);
+}
+
+/* Search row: [keyword] [location] [Search] */
+
+.wicket-directory__search {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--wd-search-gap);
+}
+
+/*
+ * search-form keeps its field and Search button in one wrapper, and on
+ * non-Wicket themes the base plugin wraps every component. Unwrap both so the
+ * keyword field, the location field and the button are all row items.
+ */
+.wicket-directory__keyword,
+.wicket-directory__keyword .component-search-form,
+.wicket-directory__search .wicket-base-plugin {
+	display: contents;
+}
+
+.wicket-directory__keyword .component-search-form > :first-child,
+.wicket-directory__search .wicket-directory__location {
+	flex: 1 1 0;
+	min-width: 0;
+}
+
+.wicket-directory__search .wicket-directory__location {
+	order: 2;
+	position: relative;
+	padding-inline: 0;
+}
+
+.wicket-directory__search .component-button {
+	order: 3;
+	flex: none;
+}
+
+.wicket-directory__location .wicket-directory__location-icon {
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: var(--wd-search-icon-inset);
+	display: flex;
+	align-items: center;
+	pointer-events: none;
+}
+
+.wicket-directory__location .wicket-directory__location-input {
+	width: 100%;
+	height: 100%;
+	padding-inline-start: var(--wd-search-icon-space);
+}

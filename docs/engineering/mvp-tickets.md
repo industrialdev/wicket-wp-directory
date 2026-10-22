@@ -27,7 +27,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | 2.7 | [FacetOptions: facet choices from schemas and resource types](#27) | 1.3 | Done |
 | 3.1 | [Block registration (server side) and BlockAttributes](#31) | 1.1 | Done |
 | 3.2 | [DirectoryRenderer and TemplateLoader (single render path)](#32) | 3.1, 2.6, 2.7 | Done |
-| 3.3 | [Search bar template (keyword + location)](#33) | 3.2 | To do |
+| 3.3 | [Search bar template (keyword + location)](#33) | 3.2 | Done |
 | 3.4 | [Refine Results filters template](#34) | 3.2 | To do |
 | 3.5 | [Results header, Order by and pagination](#35) | 3.2 | To do |
 | 3.6 | [Individual card template](#36) | 3.2 | To do |
@@ -442,6 +442,14 @@ templates/parts/search-bar.php.
 
 - Keyword value pre-fills after searching.
 - Correct order and a single Search button in every Hide combination.
+
+**Outcome:** `templates/parts/search-bar.php` and the first rules in `assets/css/directory.css` (the search row only). Unit tests: `qa/tests/Unit/Directory/SearchBarTest.pest.php` (9 tests); `DirectoryRendererTest` now checks the row is in the full render, and its `get_component` stub returns markup when `$output` is `false`. Checked with `render_block()` on the stack (Wicket theme): each Hide combination gives the expected fields and one Search button, a `<script>` keyword comes out escaped, and the block's `wicket-directory-style` handle now loads `directory.css`. Not checked in a browser. Notes for later tickets:
+- **Markup.** `div.wicket-directory__search[role=search]` → `div.wicket-directory__keyword` (the `search-form` component, which holds the keyword field and its Search button) → `div.wicket-directory__location.component-search-form.form` (`icon` `fa-solid fa-location-dot` + `input.wicket-directory__location-input`, `name`/`id` `wd{ID}_location`, `aria-label` "Location"). With Hide Keyword Search on, a `button` component (`.wicket-directory__submit`, `type=submit`, variant from the base `wicket_search_form_button_variant` filter, like `search-form`'s own button) comes last instead. With both searches hidden the part renders nothing.
+- **Keyword pre-fill.** `search-form` reads `$_GET[url-param]` and prints it unescaped. The part sets `$_GET[wd{ID}_keyword]` to `esc_attr($params->keyword)` (the sanitized value, `''` in the editor preview or when hidden) for that one call, then restores the request's own value, or unsets the key if there wasn't one. A theme override of this part must keep that swap. `classes` is passed as `[]`, so the component adds no Tailwind layout classes.
+- **Placeholders.** Individual "Search by name, member ID", organization "Search by organization", location "Search by city, province or state" (matches city or state/province name, per the query builders).
+- **Order and focus.** `directory.css` unwraps `.wicket-directory__keyword`, its `.component-search-form` and every `.wicket-base-plugin` wrapper (the base plugin wraps each component on non-Wicket themes) with `display: contents`, so the keyword field, location field and button are flex items; `order` puts the location second and `.component-button` last. Tab order follows the DOM: keyword, Search, location. Enter in either field submits the form.
+- **3.5:** with both searches hidden there is no Search button, so if Hide Filters is also on, Order by has no submit. 3.5 needs its own submit (or 3.8's JS) for that case.
+- **3.8:** fold the `--wd-search-*` properties into the token layer. The location icon is placed by our CSS (the keyword icon by `search-form`'s Tailwind classes, which only exist on the Wicket theme); check both on a non-Wicket theme. The location wrapper's mobile padding from the theme's `.component-search-form` rule is reset to `0`, because the keyword wrapper is `display: contents` and gets none.
 
 <a id="34"></a>
 
