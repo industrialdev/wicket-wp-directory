@@ -25,7 +25,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | 2.5 | [ContactResolver: shared rules for address, email, phone and website](#25) | 0.1 | Done |
 | 2.6 | [EntryMapper and entry DTOs](#26) | 2.4, 2.5 | Done |
 | 2.7 | [FacetOptions: facet choices from schemas and resource types](#27) | 1.3 | Done |
-| 3.1 | [Block registration (server side) and BlockAttributes](#31) | 1.1 | To do |
+| 3.1 | [Block registration (server side) and BlockAttributes](#31) | 1.1 | Done |
 | 3.2 | [DirectoryRenderer and TemplateLoader (single render path)](#32) | 3.1, 2.6, 2.7 | To do |
 | 3.3 | [Search bar template (keyword + location)](#33) | 3.2 | To do |
 | 3.4 | [Refine Results filters template](#34) | 3.2 | To do |
@@ -385,6 +385,13 @@ Register the dynamic block wicket/directory.
 - Block appears in the inserter.
 - Attributes are sanitized server side.
 - Unit tested (BlockAttributes).
+
+**Outcome:** `blocks/directory/block.json`, `src/Block/DirectoryBlock.php` and `src/Block/BlockAttributes.php`, booted from `Plugin::plugin_setup()`. Unit tests: `qa/tests/Unit/Directory/BlockAttributesTest.pest.php` and `DirectoryBlockTest.pest.php`. Checked with `wp eval` on the stack: the block registers in category `wicket` with its eight attributes, the editor script resolves with its dependencies, and `render_block()` returns `''`. Not checked in a browser. Notes for later tickets:
+- **`BlockAttributes::from_array($attributes)`** gives `directory_id` (0 or more), `default_sort`, `results_per_page` (clamped to 1–50; a non-integer gives 6) and the five toggles as real booleans. Numeric strings are accepted for the integers, because REST and hand-written block markup can send them. The default sort needs the directory type, so `default_sort` holds the editor's sanitized token as given, and **`sort(DirectoryType $type)`** resolves it: an unset, unknown or other-type token gives the type's default. Pass `$attributes->sort($config->type)` and the `hide_*` flags to `RequestParams::from_request()`.
+- **`DirectoryBlock::render()`** sanitizes the attributes and returns `''`. 3.2 wires in `DirectoryRenderer` here. The flow is render callback → `BlockAttributes` → renderer, so the renderer can take a `BlockAttributes` (with `directory_id`) instead of the plan's `render(int $dir_id, array $block_attrs)`.
+- **Block category.** The base plugin adds the `wicket` category only when ACF is active. `DirectoryBlock::add_category()` adds it when no other plugin has.
+- **Editor script (interim).** The inserter only lists blocks that are registered in JS, so `blocks/directory/index.js` is a plain-JS (no build) `registerBlockType` with a `ServerSideRender` canvas, and `index.asset.php` lists its dependencies. 4.1 replaces both with the `@wordpress/scripts` source and build, and changes the path in `DirectoryBlock::register_block()` from `blocks/directory` to `build/directory`.
+- **Style.** `block.json` `style` is `file:../../assets/css/directory.css`. The path stays the same from `build/directory`. The file doesn't exist yet (3.8), so WordPress registers the handle without a source.
 
 <a id="32"></a>
 

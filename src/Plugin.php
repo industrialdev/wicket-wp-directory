@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Wicket\Directory;
 
+use Wicket\Directory\Block\DirectoryBlock;
 use Wicket\Directory\PostType\DirectoryPostType;
 
 /**
@@ -71,5 +72,6 @@ final class Plugin
         );
 
         (new DirectoryPostType())->register();
+        (new DirectoryBlock())->register();
     }
 }

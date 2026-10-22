@@ -1,0 +1,50 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "wicket/directory",
+  "title": "Wicket Directory",
+  "category": "wicket",
+  "icon": "groups",
+  "description": "A searchable directory of individuals or organizations from Wicket.",
+  "keywords": ["directory", "members", "organizations", "search"],
+  "textdomain": "wicket-directory",
+  "attributes": {
+    "directoryId": {
+      "type": "integer",
+      "default": 0
+    },
+    "defaultSort": {
+      "type": "string",
+      "default": ""
+    },
+    "resultsPerPage": {
+      "type": "integer",
+      "default": 6
+    },
+    "hideKeyword": {
+      "type": "boolean",
+      "default": false
+    },
+    "hideLocation": {
+      "type": "boolean",
+      "default": false
+    },
+    "hideFilters": {
+      "type": "boolean",
+      "default": false
+    },
+    "hideOrderBy": {
+      "type": "boolean",
+      "default": false
+    },
+    "collapseRefineOnMobile": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "supports": {
+    "html": false
+  },
+  "editorScript": "file:./index.js",
+  "style": "file:../../assets/css/directory.css"
+}

@@ -47,7 +47,8 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
     DirectoryPostType            (landed) CPT `wicket_directory` (caps → manage_options, classic editor) + `_wicket_directory_config` post meta (REST `edit` context only)
       → Config\DirectoryConfig   (landed) typed config: defaults(type), from_post(post), sanitize(input, ?previous), to_array(); Config\DirectoryType enum
     DirectoryMetaBoxes           classic edit screen (block editor disabled for this CPT)
-    DirectoryBlock               dynamic block `wicket/directory` → DirectoryRenderer
+    Block\DirectoryBlock         (landed) dynamic block `wicket/directory` from blocks/directory/block.json; adds the `wicket` category if missing; render_callback → DirectoryRenderer (3.2)
+      → Block\BlockAttributes    (landed) from_array(attributes): sanitized, resultsPerPage clamped 1–50; sort(DirectoryType) resolves defaultSort
 ```
 
 Namespace `Wicket\Directory\` → `src/`. Text domain `wicket-directory`.
@@ -56,7 +57,7 @@ Namespace `Wicket\Directory\` → `src/`. Text domain `wicket-directory`.
 
 ```
 Block render_callback / ServerSideRender
-  → BlockAttributes (sanitize, clamp)
+  → Block\BlockAttributes (landed; sanitize, clamp; sort(type) → type default for an invalid defaultSort)
   → DirectoryRenderer
       → load directory post (not `publish` → render nothing; notice in the editor)
       → Data\FacetOptions        (landed) for_config(config, lang) → facet key => [{value, label}] from enums; values() → RequestParams' allow-list
