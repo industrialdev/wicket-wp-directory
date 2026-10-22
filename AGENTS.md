@@ -33,7 +33,8 @@ Tests live in the shared QA suite at `../../../../../../qa/`, never in this repo
 **Every time you write or change code, write unit tests for it in the same task.** A change without tests isn't done, however small it is.
 
 - **No Browser tests** Don't write browser tests for now.
-- **Run them** with `wicket test unit:directory` before handing off. If any fail, report the output.
+- **Run them** with `wicket test unit:directory` before handing off. If any fail, report the output. Until a `wicket` CLI release registers the package, the CLI answers `unknown component "directory"`: run `docker exec -w /var/www/qa wicket-wp-stack-php-1 composer test:unit:directory` instead.
+- Tests live in `qa/tests/Unit/Directory/`. `AbstractTestCase` stubs the WordPress functions the config, query and data classes call. `Support/Fixtures` holds MDP payloads. Guard each file with `wicket_skip_if_missing()` on a symbol the change introduces, so qa `main` stays green while the plugin PR is open.
 
 ## Architecture (planned)
 
@@ -58,12 +59,13 @@ Block render_callback / ServerSideRender
   → BlockAttributes (sanitize, clamp)
   → DirectoryRenderer
       → load directory post (not `publish` → render nothing; notice in the editor)
+      → Data\FacetOptions        (landed) for_config(config, lang) → facet key => [{value, label}] from enums; values() → RequestParams' allow-list
       → Query\RequestParams      (landed) flat GET params prefixed `wd{ID}_…`; sort tokens from DirectoryType::sort_options()
       → Query\OrganizationQueryBuilder | PersonQueryBuilder (landed) → Query\DirectoryQuery (landed; path() + body(), or matches_nothing)
       → Api\DirectoryRepository  (landed) builder by type → API + transient cache → Api\ResultPage (landed; `unavailable` on API failure)
       → Data\EntryMapper (landed; map(page, config, slug, lang) → Data\PersonEntry | Data\OrganizationEntry, immutable, raw values, empty = hidden)
           uses Data\ContactResolver (landed; static resolve(field, records, rule), the truth table)
-          and Data\EnumLabels (landed; enum-key + org-type labels, one load per source per request)
+          and Data\EnumLabels (landed; enum-key + org-type labels, one load per source per request; shared() keeps the maps in a transient per language)
       → TemplateLoader → templates/ (theme can override at wicket-directory/…)
 ```
 
@@ -107,6 +109,7 @@ There is **one render path**. The frontend and the block editor preview both go 
 | `wicket_directory/before_render`, `wicket_directory/before_render_{slug}` (action) | Runs before the listing renders |
 | `wicket_directory/card_template` (filter) | Swap the card template file |
 | `wicket_directory/cache_ttl` (filter) | (landed) API response cache lifetime in seconds (default 600). Gets `$ttl`, `DirectoryConfig`, the directory `WP_Post`. `0` disables the cache |
+| `wicket_directory/labels_cache_ttl` (filter) | (landed) Lifetime of the per-language enum and org-type label transient that facets and cards share (default 3600). Gets `$ttl`, `$lang`. `0` disables it |
 
 ## Code Style
 

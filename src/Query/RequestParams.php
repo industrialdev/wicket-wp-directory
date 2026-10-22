@@ -180,13 +180,9 @@ final class RequestParams
             foreach (is_array($value) ? $value : [$value] as $item) {
                 $item = self::scalar($item);
 
-                if ($item === null) {
-                    continue;
-                }
-
-                $item = sanitize_text_field($item);
-
-                if (in_array($item, $allowed, true)) {
+                // The strict allow-list match is the sanitizing. sanitize_text_field()
+                // would break enum values such as "< 1" (it gives "&lt; 1").
+                if ($item !== null && in_array($item, $allowed, true)) {
                     $values[] = $item;
                 }
             }

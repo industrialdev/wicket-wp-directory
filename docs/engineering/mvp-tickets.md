@@ -1,7 +1,7 @@
 ---
 title: "MVP Tickets"
 audience: [developer, agent]
-updated: 2026-10-02
+updated: 2026-10-22
 ---
 
 # `wicket-wp-directory` MVP tickets
@@ -24,7 +24,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | 2.4 | [DirectoryRepository: execute queries with caching and error handling](#24) | 2.2, 2.3 | Done |
 | 2.5 | [ContactResolver: shared rules for address, email, phone and website](#25) | 0.1 | Done |
 | 2.6 | [EntryMapper and entry DTOs](#26) | 2.4, 2.5 | Done |
-| 2.7 | [FacetOptions: facet choices from schemas and resource types](#27) | 1.3 | To do |
+| 2.7 | [FacetOptions: facet choices from schemas and resource types](#27) | 1.3 | Done |
 | 3.1 | [Block registration (server side) and BlockAttributes](#31) | 1.1 | To do |
 | 3.2 | [DirectoryRenderer and TemplateLoader (single render path)](#32) | 3.1, 2.6, 2.7 | To do |
 | 3.3 | [Search bar template (keyword + location)](#33) | 3.2 | To do |
@@ -178,7 +178,7 @@ Add src/Query/RequestParams.php.
 - `page` is at least 1. It isn't capped to the last page, because that's only known after the query. 2.4/3.5 clamp it to `meta.page.total_pages`.
 - Keyword and location go through `sanitize_text_field` and are capped at 200 characters. An array value is ignored.
 - **Facet keys** come from `RequestParams::facet_key($facet)`: `org_type`, or `{schema_key}__{field}` for a data field. They have no dots because PHP turns dots in GET keys into `_`. Use this one function wherever a facet needs a key: GET params, the `$facet_options` map, and 2.7's `FacetOptions` output.
-- `$facet_options` is `facet key => allowed values` (2.7 supplies it). A facet missing from the map accepts no values. Selected values are sanitized, checked strictly against the allowed strings, and de-duplicated. A scalar `wd{ID}_{key}=x` is accepted as well as `[]`. Facets with nothing selected are left out of `facets`, so builders never send `''`.
+- `$facet_options` is `facet key => allowed values` (2.7 supplies it). A facet missing from the map accepts no values. Selected values are checked strictly against the allowed strings and de-duplicated. They aren't passed through `sanitize_text_field()` first: the allow-list match is the sanitizing, and `sanitize_text_field()` turned enum values such as `< 1` into `&lt; 1`, so they could never be selected (fixed in 2.7). A scalar `wd{ID}_{key}=x` is accepted as well as `[]`. Facets with nothing selected are left out of `facets`, so builders never send `''`.
 - `param($name)` builds the full GET key (e.g. `wd12_keyword`) for templates: `search-form`'s `url-param`, form field names, and the pagination format. `facet_values($facet)` gives the selected values for a facet.
 - The org-type facet isn't intersected with `eligibility.org_types` here. 2.2 does that, and 2.7/3.4 should only offer eligible org types.
 
@@ -350,6 +350,19 @@ Add src/Data/FacetOptions.php.
 
 - Facet options match what MDP admins see.
 - Options come from the enum, not from the current result set.
+
+**Outcome:** `src/Data/FacetOptions.php`, plus a per-language label transient in `EnumLabels` and a fix in `RequestParams`. The qa unit suite is wired for the plugin (the unit part of 6.1), with tests in `qa/tests/Unit/Directory/`: `FacetOptionsTest` and `EnumLabelsCacheTest`, 24 tests. Also checked with `wp eval-file` against the staging tenant. EN/FR org types ("Company" → "Compagnie") and `practice_details.experienceRange` (`< 1` → "Less than 1") come from the enums. `eligibility.org_types` narrows the org-type facet. A warm transient means neither `json_schemas` nor `resource_types` is requested. Notes for later tickets:
+- **`(new FacetOptions())->for_config($config, $lang = null)`** returns `facet key => list<{value, label}>`, in config order, with each facet's options in enum order. Keys come from `RequestParams::facet_key()`. `$lang` defaults to `wicket_get_current_language()` and is normalised like the query (`QueryBuilder::language()`). `for_facet($facet, $config, $lang)` gives one facet's list (5.3's preview can use it). The constructor takes an optional `EnumLabels`; it defaults to `EnumLabels::shared()`.
+- **3.2** builds the options once per render, then passes `FacetOptions::values($options)` to `RequestParams::from_request()` as `$facet_options` and the full options to 3.4. Values are always strings. Numeric enum keys come back as PHP int array keys from `EnumLabels`, and `FacetOptions` casts them.
+- **3.4** should hide a facet whose list is `[]`. That happens for a field that isn't an enum, a schema key that no longer exists, an org-type facet whose eligible types are all unknown, or a failed load. The facet's heading is `$facet['label']`. An empty label needs a template fallback (e.g. "Organization type"). `FacetOptions` doesn't derive one from the schema.
+- **Org-type facet.** Options follow the `resource_types` order. When `eligibility.org_types` is set, only those types are offered: the same intersection `OrganizationQueryBuilder` makes, so a visitor never sees a choice that can't match. Unknown eligible slugs are skipped. On an individual config it is always `[]`, and nothing is loaded.
+- **Label transient.** `EnumLabels::shared()` (so `EntryMapper` and `FacetOptions` by default) keeps every resolved label map in one transient per language, `wicket_directory_labels_{LABELS_CACHE_FORMAT}_{lang}`. It holds `schema_key|field` and `org_types` maps, is read once per language per request and written only on a miss. While it's warm, neither source loads, so a cached results page no longer makes a `json_schemas` request. The TTL is `LABELS_CACHE_TTL` (3600), changed with `wicket_directory/labels_cache_ttl` (`$ttl, $lang`). A value of 0 or less disables reads and writes. Maps from a failed load (a thrown error, a `json_schemas` response with no data, or an empty org-type list) aren't stored, so the next request retries. A non-enum field's empty map is stored. Malformed entries are ignored and rebuilt. Schema edits in the MDP show after at most the TTL; nothing clears the transient on save, because directory saves don't change labels. `new EnumLabels()` without `persistent: true` behaves as before.
+- **5.3** still has to list the *candidate* data fields (every enum field in `wicket_get_schemas()`). `FacetOptions` only resolves the options of facets that are already configured.
+- **Tests.** The qa wiring (composer autoload and scripts, `pest.php` path helper, prefix map, bootstrap and `uses()`, `run-pest-suite.php` maps, `phpunit.xml` source, `package-map.json`, and `package-config.json` as `development`) is in the qa working tree. `development` keeps the package out of `composer test:unit`, so run `composer test:unit:directory` in the PHP container. `wicket test unit:directory` answers `unknown component "directory"` until the CLI registry has the package. Left for 6.1:
+  - the CLI registry;
+  - the stack root docs;
+  - **phpstan.** Adding the plugin to `qa/phpstan.neon` gives 20 errors in existing code. Eighteen are false positives from `EntryMapper`'s string-keyed spread into the entry constructors. The other two are `Entry::with()`'s unsafe `new static()` and `WICKET_DIRECTORY_BASENAME`, which `phpstan-bootstrap.php` doesn't define. The plugin was therefore left out of phpstan.
+- **qa quirk.** `uses(...)->in('tests/Unit/X')` in `qa/pest.php` resolves against `qa/tests/`, so it never applies (Portus's base class doesn't load either). The Directory line uses `__DIR__ . '/tests/Unit/Directory'`. The other packages weren't changed.
 
 ## 3. Block & rendering
 
