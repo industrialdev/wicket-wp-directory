@@ -30,7 +30,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | 3.3 | [Search bar template (keyword + location)](#33) | 3.2 | Done |
 | 3.4 | [Refine Results filters template](#34) | 3.2 | Done |
 | 3.5 | [Results header, Order by and pagination](#35) | 3.2 | Done |
-| 3.6 | [Individual card template](#36) | 3.2 | To do |
+| 3.6 | [Individual card template](#36) | 3.2 | Done |
 | 3.7 | [Organization card template](#37) | 3.2 | To do |
 | 3.8 | [Directory CSS (Wicket theme tokens) and JS](#38) | 3.2 | To do |
 | 4.1 | [Block editor sidebar, preview and build](#41) | 3.1, 3.2 | To do |
@@ -526,6 +526,26 @@ templates/cards/card-individual.php.
 
 - Every toggle shows/hides its field.
 - Rows with no resolved value are hidden.
+
+**Outcome:** `templates/cards/card-individual.php` and the card layout rules in `assets/css/directory.css`. No renderer change: `DirectoryRenderer` already located `cards/card-{type}` and `directory.php` already loaded it per entry. Unit tests: `qa/tests/Unit/Directory/CardIndividualTest.pest.php` (25 tests). They cover every field, escaping, the args passed to each component, each empty row hidden, several picked contacts, and the name, job title and member ID toggles mapped through `EntryMapper` and then rendered. Checked with `render_block()` on the stack against directory 1818 (staging people, every toggle switched on in memory): member IDs, tiers, emails and phones render, and empty rows are hidden. Also checked in headless Chromium (Playwright) on the Wicket theme, with a `wicket_directory/entry` callback that filled in a photo, eyebrow, post-nominal, job title, two addresses, a website and chips. The theme's card-listing styles apply. At 1280px the photo and the three columns sit side by side; at 390px they stack. No JS errors. Notes for later tickets:
+- **Markup.** `article.component-card-listing.wicket-directory-card.wicket-directory-card--individual` → `.wicket-directory-card__media > img.wicket-directory-card__image` (`loading="lazy"`, `decoding="async"`, `alt=""`, because the name follows) → `.component-card-listing__content.wicket-directory-card__content`, which holds:
+  - the eyebrow (`.component-card-listing__content-type`);
+  - `h3.component-card-listing__title.wicket-directory-card__title`;
+  - `p.wicket-directory-card__job-title`;
+  - `.wicket-directory-card__columns`: `dl.wicket-directory-card__details` (Member ID, Membership), `.wicket-directory-card__addresses` (one `icon` `fa-regular fa-location-dot` plus `<address>` per address, lines joined with `<br>`) and `ul.wicket-directory-card__contacts` (emails, then phones);
+  - `.wicket-directory-card__actions` (one Visit Website `button` per website);
+  - `.card__topics.wicket-directory-card__tags` (one `tag` per chip). `.card__topics` gets the theme's chip row styles from `card-listing.scss`.
+  
+  No Tailwind classes. 3.7 should reuse the `wicket-directory-card__*` blocks so one set of rules styles both cards.
+- **Title.** `name`, plus the post-nominal after a comma when it is set (`%1$s, %2$s`, translatable: "Ada Lovelace, FRS"). The salutation, middle name and suffix are already in `name` (2.6), so the template never reads the toggles. The card is an `h3`; a theme override can change the level.
+- **Components.** Each value is escaped first, because these components print their args as given:
+  - Email: `link` with `esc_url('mailto:…')` and `icon_start` `fa-regular fa-envelope` (screen-reader text "Email").
+  - Phone: `link` to the entry's `uri` with `fa-regular fa-phone`. The text is `%1$s ext. %2$s` when there is an extension. A phone whose `uri` a filter emptied is shown as plain text with the icon.
+  - Website: `button` with `a_tag`, `variant` `secondary`, `suffix_icon` `fa-solid fa-arrow-up-right-from-square`, `link_target` `_blank` and `rel="noopener"`. The label is `card.website_label`, or "Visit Website".
+  - Chips: `tag` gets the **raw** label, because it calls `esc_html()` itself. Passing an escaped label would double-encode `&`.
+- **Empty rows.** Each row, column and wrapper renders only when its value is non-empty. An entry with only a name renders just the title.
+- **CSS.** `.wicket-directory__list` is a grid with `--wd-list-gap`. Each `li.wicket-directory__item` is an inline-size container named `wd-card`. The card stacks by default, and at `@container wd-card (min-width: 36rem)` the media and content, and then the columns, become rows. `.wicket-directory .wicket-directory-card` overrides the theme's viewport-based `md:flex-row`, so a narrow card in a wide page still stacks. New tokens: `--wd-list-gap`, `--wd-card-gap` (`--spacing-200`), `--wd-card-row-gap` (`--spacing-100`), `--wd-card-image-size` (`--spacing-1000`, a round 5rem photo), `--wd-card-text-muted` (`--color-text-content-secondary`) and `--wd-card-label-size` (`--font-size-label-md`).
+- **3.8:** fold the `--wd-card-*` properties into the token layer. Give the card its own chrome (background, border, radius, padding, shadow) on non-Wicket themes, where `component-card-listing` has no rules. Check the chips there too: `tag` gets Tailwind classes without `WICKET_WP_THEME_V2`.
 
 <a id="37"></a>
 

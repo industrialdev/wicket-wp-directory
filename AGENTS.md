@@ -74,7 +74,8 @@ Block render_callback / ServerSideRender
           parts/results-header (landed): "Displaying X–Y of N" count + Order by select (submits on change; noscript Sort button)
           parts/pagination (landed): wicket_pagination() if the theme has it, else paginate_links() in nav.wicket-pagination; base on wd{ID}_pg
           parts/no-results (landed): no-results message, or the alert component for an `unavailable` page
-          assets/css/directory.css (started: search row, Refine Results panel, results header)
+          cards/card-individual (landed): component-card-listing classes; details / address / contact columns; tag, button, link + icon components
+          assets/css/directory.css (started: search row, Refine Results panel, results header, card layout + container query)
 ```
 
 There is **one render path**. The frontend and the block editor preview both go through `DirectoryRenderer`. Don't add a second one.

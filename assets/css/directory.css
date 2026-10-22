@@ -13,6 +13,12 @@
 	--wd-filters-option-gap: var(--spacing-150, 0.75rem);
 	--wd-results-gap: var(--spacing-200, 1rem);
 	--wd-sort-gap: var(--spacing-150, 0.75rem);
+	--wd-list-gap: var(--spacing-200, 1rem);
+	--wd-card-gap: var(--spacing-200, 1rem);
+	--wd-card-row-gap: var(--spacing-100, 0.5rem);
+	--wd-card-image-size: var(--spacing-1000, 5rem);
+	--wd-card-text-muted: var(--color-text-content-secondary, #5b6670);
+	--wd-card-label-size: var(--font-size-label-md, 0.875rem);
 }
 
 /* Alpine-only controls stay hidden until Alpine runs (the Wicket theme has this rule; others may not). */
@@ -186,4 +192,124 @@
 
 .wicket-directory__no-results-title {
 	font-weight: bold;
+}
+
+/* Cards. The theme's component-card-listing styles do the look; these do the layout. */
+
+.wicket-directory__list {
+	display: grid;
+	gap: var(--wd-list-gap);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.wicket-directory__item {
+	container: wd-card / inline-size;
+	margin: 0;
+}
+
+/* Narrow cards stack; the theme's card-listing only switches on the viewport. */
+.wicket-directory .wicket-directory-card {
+	display: flex;
+	flex-direction: column;
+	gap: var(--wd-card-gap);
+}
+
+.wicket-directory-card__content {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.wicket-directory-card__content > * {
+	margin-block: 0 var(--wd-card-gap);
+}
+
+.wicket-directory-card__content > :last-child {
+	margin-block-end: 0;
+}
+
+.wicket-directory-card__media {
+	flex: none;
+}
+
+.wicket-directory-card__image {
+	display: block;
+	width: var(--wd-card-image-size);
+	height: var(--wd-card-image-size);
+	border-radius: 50%;
+	object-fit: cover;
+}
+
+.wicket-directory .wicket-directory-card__title {
+	display: block;
+}
+
+.wicket-directory .wicket-directory-card__job-title {
+	margin-block-start: calc(var(--wd-card-gap) * -0.5);
+	color: var(--wd-card-text-muted);
+}
+
+.wicket-directory-card__columns {
+	display: flex;
+	flex-direction: column;
+	gap: var(--wd-card-gap);
+}
+
+.wicket-directory-card__column {
+	flex: 1 1 0;
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	overflow-wrap: anywhere;
+}
+
+.wicket-directory-card__detail + .wicket-directory-card__detail,
+.wicket-directory-card__address + .wicket-directory-card__address,
+.wicket-directory-card__contact + .wicket-directory-card__contact {
+	margin-block-start: var(--wd-card-row-gap);
+}
+
+.wicket-directory-card__details dt {
+	font-size: var(--wd-card-label-size);
+	font-weight: bold;
+}
+
+.wicket-directory-card__details dd {
+	margin: 0;
+}
+
+.wicket-directory-card__address {
+	display: flex;
+	align-items: baseline;
+	gap: var(--wd-card-row-gap);
+}
+
+.wicket-directory-card__address address {
+	font-style: normal;
+}
+
+.wicket-directory-card__phone {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--wd-card-row-gap);
+}
+
+.wicket-directory-card__actions,
+.wicket-directory-card__tags {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--wd-card-row-gap);
+}
+
+@container wd-card (min-width: 36rem) {
+	.wicket-directory .wicket-directory-card {
+		flex-direction: row;
+		align-items: flex-start;
+	}
+
+	.wicket-directory-card__columns {
+		flex-direction: row;
+	}
 }
