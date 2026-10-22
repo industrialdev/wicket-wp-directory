@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Wicket\Directory\Block;
 
+use Wicket\Directory\Render\DirectoryRenderer;
+
 /**
  * The dynamic `wicket/directory` block: the only way to place a directory.
  *
@@ -23,6 +25,19 @@ final class DirectoryBlock
      * active, so add_category() adds it when it's missing.
      */
     public const CATEGORY = 'wicket';
+
+    /**
+     * Renders the block; see renderer().
+     */
+    private ?DirectoryRenderer $renderer;
+
+    /**
+     * @param DirectoryRenderer|null $renderer Defaults to one made on first render. Tests pass one.
+     */
+    public function __construct(?DirectoryRenderer $renderer = null)
+    {
+        $this->renderer = $renderer;
+    }
 
     /**
      * Hook into WordPress.
@@ -82,9 +97,17 @@ final class DirectoryBlock
      */
     public function render(array $attributes): string
     {
-        $attributes = BlockAttributes::from_array($attributes);
+        return $this->renderer()->render(BlockAttributes::from_array($attributes));
+    }
 
-        // The directory renderer isn't wired in yet; until it is, the block outputs nothing.
-        return '';
+    /**
+     * The directory renderer, made on first use so the block can register
+     * without building the API and label services.
+     *
+     * @return DirectoryRenderer
+     */
+    private function renderer(): DirectoryRenderer
+    {
+        return $this->renderer ??= new DirectoryRenderer();
     }
 }

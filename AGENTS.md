@@ -47,7 +47,7 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
     DirectoryPostType            (landed) CPT `wicket_directory` (caps → manage_options, classic editor) + `_wicket_directory_config` post meta (REST `edit` context only)
       → Config\DirectoryConfig   (landed) typed config: defaults(type), from_post(post), sanitize(input, ?previous), to_array(); Config\DirectoryType enum
     DirectoryMetaBoxes           classic edit screen (block editor disabled for this CPT)
-    Block\DirectoryBlock         (landed) dynamic block `wicket/directory` from blocks/directory/block.json; adds the `wicket` category if missing; render_callback → DirectoryRenderer (3.2)
+    Block\DirectoryBlock         (landed) dynamic block `wicket/directory` from blocks/directory/block.json; adds the `wicket` category if missing; render_callback → DirectoryRenderer
       → Block\BlockAttributes    (landed) from_array(attributes): sanitized, resultsPerPage clamped 1–50; sort(DirectoryType) resolves defaultSort
 ```
 
@@ -58,16 +58,17 @@ Namespace `Wicket\Directory\` → `src/`. Text domain `wicket-directory`.
 ```
 Block render_callback / ServerSideRender
   → Block\BlockAttributes (landed; sanitize, clamp; sort(type) → type default for an invalid defaultSort)
-  → DirectoryRenderer
-      → load directory post (not `publish` → render nothing; notice in the editor)
+  → Render\DirectoryRenderer   (landed) render(BlockAttributes)
+      → load directory post (missing/trashed/not `publish` → '' for visitors; parts/notice.php in the editor preview)
       → Data\FacetOptions        (landed) for_config(config, lang) → facet key => [{value, label}] from enums; values() → RequestParams' allow-list
       → Query\RequestParams      (landed) flat GET params prefixed `wd{ID}_…`; sort tokens from DirectoryType::sort_options()
+      → do_action before_render, before_render_{slug} (before the API query; echoed output comes first)
       → Query\OrganizationQueryBuilder | PersonQueryBuilder (landed) → Query\DirectoryQuery (landed; path() + body(), or matches_nothing)
       → Api\DirectoryRepository  (landed) builder by type → API + transient cache → Api\ResultPage (landed; `unavailable` on API failure)
       → Data\EntryMapper (landed; map(page, config, slug, lang) → Data\PersonEntry | Data\OrganizationEntry, immutable, raw values, empty = hidden)
           uses Data\ContactResolver (landed; static resolve(field, records, rule), the truth table)
           and Data\EnumLabels (landed; enum-key + org-type labels, one load per source per request; shared() keeps the maps in a transient per language)
-      → TemplateLoader → templates/ (theme can override at wicket-directory/…)
+      → Render\TemplateLoader (landed) templates/directory.php → parts/*, cards/card-{type} (theme overrides at {theme}/wicket-directory/{name}.php)
 ```
 
 There is **one render path**. The frontend and the block editor preview both go through `DirectoryRenderer`. Don't add a second one.
@@ -107,8 +108,8 @@ There is **one render path**. The frontend and the block editor preview both go 
 |---|---|
 | `wicket_directory/query_args`, `wicket_directory/query_args_{slug}` (filter) | (landed) Modify the API query before it runs. Gets `$args` (`filter`, `page`, `sort`, `include`), `DirectoryConfig`, `RequestParams`. `{slug}` is the directory post's slug |
 | `wicket_directory/entry`, `wicket_directory/entry_{slug}` (filter) | (landed) Modify one entry's data before its card renders. Gets the entry's `to_array()`, the raw API resource and `DirectoryConfig`; returns the array. Unknown keys are dropped and wrong-typed values keep the original; custom data goes under `extra` |
-| `wicket_directory/before_render`, `wicket_directory/before_render_{slug}` (action) | Runs before the listing renders |
-| `wicket_directory/card_template` (filter) | Swap the card template file |
+| `wicket_directory/before_render`, `wicket_directory/before_render_{slug}` (action) | (landed) Runs before the API query and the listing render. Gets `DirectoryConfig`, `RequestParams`, the directory `WP_Post`. Output it prints comes before the directory. Not fired for a missing or unpublished directory |
+| `wicket_directory/card_template` (filter) | (landed) Swap the card template file, once per render. Gets the located absolute path (`''` when none), `DirectoryConfig`, the directory `WP_Post`. A return that isn't an existing file keeps the located one |
 | `wicket_directory/cache_ttl` (filter) | (landed) API response cache lifetime in seconds (default 600). Gets `$ttl`, `DirectoryConfig`, the directory `WP_Post`. `0` disables the cache |
 | `wicket_directory/labels_cache_ttl` (filter) | (landed) Lifetime of the per-language enum and org-type label transient that facets and cards share (default 3600). Gets `$ttl`, `$lang`. `0` disables it |
 
