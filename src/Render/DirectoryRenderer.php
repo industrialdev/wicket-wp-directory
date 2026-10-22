@@ -172,6 +172,7 @@ final class DirectoryRenderer
         $page = $this->repository->fetch($directory, $config, $params, $attributes->results_per_page, $lang);
         $entries = $this->mapper->map($page, $config, $directory->post_name, $lang);
         $is_preview = ($this->is_preview)();
+        $prefix = RequestParams::prefix($directory->ID);
 
         $this->templates->load('directory', [
             'directory'     => $directory,
@@ -183,7 +184,8 @@ final class DirectoryRenderer
             'facet_options' => $facet_options,
             'show_filters'  => self::has_choices($facet_options),
             'card_template' => $this->card_template($directory, $config),
-            'hidden_fields' => $is_preview ? [] : self::hidden_fields($_GET, RequestParams::prefix($directory->ID)),
+            'hidden_fields' => $is_preview ? [] : self::hidden_fields($_GET, $prefix),
+            'clear_url'     => $is_preview ? '#' : self::clear_url($_GET, $prefix),
             'html_id'       => 'wicket-directory-' . $directory->ID,
             'is_preview'    => $is_preview,
             'lang'          => $lang,
@@ -274,6 +276,30 @@ final class DirectoryRenderer
         }
 
         return $fields;
+    }
+
+    /**
+     * The current page's URL without this directory's params.
+     *
+     * Clear All links here: it resets this directory's search, filters, sort
+     * and page, and keeps everything else in the query string (another
+     * directory's params, `page_id`, …).
+     *
+     * @param array<mixed> $query  Raw, slashed query vars.
+     * @param string       $prefix This directory's param prefix, e.g. `wd12_`.
+     *
+     * @return string Unescaped URL.
+     */
+    private static function clear_url(array $query, string $prefix): string
+    {
+        $own = array_filter(
+            array_map('strval', array_keys($query)),
+            static fn (string $name): bool => str_starts_with($name, $prefix),
+        );
+        $url = isset($_SERVER['REQUEST_URI']) && is_string($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '/';
+
+        // remove_query_arg() gives back the URL as-is when there's nothing to remove.
+        return remove_query_arg(array_values($own), $url);
     }
 
     /**

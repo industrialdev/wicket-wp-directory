@@ -9,6 +9,13 @@
 	--wd-search-gap: var(--spacing-100, 0.5rem);
 	--wd-search-icon-inset: var(--spacing-200, 1rem);
 	--wd-search-icon-space: var(--spacing-500, 2.5rem);
+	--wd-filters-gap: var(--spacing-100, 0.5rem);
+	--wd-filters-option-gap: var(--spacing-150, 0.75rem);
+}
+
+/* Alpine-only controls stay hidden until Alpine runs (the Wicket theme has this rule; others may not). */
+.wicket-directory [x-cloak] {
+	display: none !important;
 }
 
 /* Search row: [keyword] [location] [Search] */
@@ -60,4 +67,84 @@
 	width: 100%;
 	height: 100%;
 	padding-inline-start: var(--wd-search-icon-space);
+}
+
+/* Refine Results panel. The theme's filter-form styles do the look; these do the layout. */
+
+.wicket-directory__filters-top,
+.wicket-directory__filters-title,
+.wicket-directory__facet-toggle,
+.wicket-directory__facet-status {
+	display: flex;
+	align-items: center;
+	gap: var(--wd-filters-gap);
+}
+
+.wicket-directory__filters-top {
+	justify-content: space-between;
+}
+
+/* Bare buttons: no theme button chrome. */
+.wicket-directory .wicket-directory__filters-toggle,
+.wicket-directory .wicket-directory__facet-toggle,
+.wicket-directory .wicket-directory__see-more {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+}
+
+.wicket-directory .wicket-directory__facet-toggle {
+	width: 100%;
+	text-align: start;
+}
+
+.wicket-directory .wicket-directory__see-more {
+	text-decoration: underline;
+}
+
+.wicket-directory__facet-status {
+	margin-inline-start: auto;
+}
+
+.wicket-directory__options {
+	margin: var(--wd-filters-option-gap) 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.wicket-directory__option {
+	display: flex;
+	align-items: center;
+	gap: var(--wd-filters-gap);
+	margin: 0 0 var(--wd-filters-option-gap);
+}
+
+.wicket-directory__option .wicket-directory__checkbox,
+.wicket-directory__option label {
+	margin: 0;
+}
+
+.wicket-directory__option label {
+	font-weight: normal;
+}
+
+/* Mobile and tablet (below the theme's lg breakpoint) collapse; desktop always shows the panel. */
+@media (max-width: 1023.98px) {
+	.wicket-directory__filters-top {
+		cursor: pointer;
+	}
+
+	.wicket-directory__filters--collapsed .wicket-directory__filters-group {
+		display: none;
+	}
+}
+
+@media (min-width: 1024px) {
+	.wicket-directory .wicket-directory__filters-toggle {
+		display: none;
+	}
 }

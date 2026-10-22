@@ -18,6 +18,7 @@
  *     show_filters: bool,
  *     card_template: string,
  *     hidden_fields: list<array{name: string, value: string}>,
+ *     clear_url: string,
  *     html_id: string,
  *     is_preview: bool,
  *     lang: string,

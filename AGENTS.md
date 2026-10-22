@@ -69,7 +69,9 @@ Block render_callback / ServerSideRender
           uses Data\ContactResolver (landed; static resolve(field, records, rule), the truth table)
           and Data\EnumLabels (landed; enum-key + org-type labels, one load per source per request; shared() keeps the maps in a transient per language)
       → Render\TemplateLoader (landed) templates/directory.php → parts/*, cards/card-{type} (theme overrides at {theme}/wicket-directory/{name}.php)
-          parts/search-bar (landed): search-form + location field; assets/css/directory.css (started: search row only)
+          parts/search-bar (landed): search-form + location field
+          parts/filters (landed): Refine Results checkbox groups (component-filter-form__* classes), Apply Filters, Clear All → clear_url
+          assets/css/directory.css (started: search row and Refine Results panel)
 ```
 
 There is **one render path**. The frontend and the block editor preview both go through `DirectoryRenderer`. Don't add a second one.
