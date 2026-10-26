@@ -241,13 +241,38 @@
 	object-fit: cover;
 }
 
+/* Logos keep their shape: up to twice as wide as a photo, never cropped. */
+.wicket-directory-card__image--logo {
+	width: auto;
+	max-width: calc(var(--wd-card-image-size) * 2);
+	border-radius: 0;
+	object-fit: contain;
+}
+
 .wicket-directory .wicket-directory-card__title {
 	display: block;
 }
 
-.wicket-directory .wicket-directory-card__job-title {
+.wicket-directory .wicket-directory-card__job-title,
+.wicket-directory .wicket-directory-card__org-type {
 	margin-block-start: calc(var(--wd-card-gap) * -0.5);
 	color: var(--wd-card-text-muted);
+}
+
+.wicket-directory-card__description p {
+	margin: 0;
+}
+
+/* A bare, link-styled button: no theme button chrome. */
+.wicket-directory .wicket-directory-card__description-toggle {
+	margin: var(--wd-card-row-gap) 0 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+	text-decoration: underline;
+	cursor: pointer;
 }
 
 .wicket-directory-card__columns {

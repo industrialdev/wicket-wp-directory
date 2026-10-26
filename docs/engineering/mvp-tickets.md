@@ -31,7 +31,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | 3.4 | [Refine Results filters template](#34) | 3.2 | Done |
 | 3.5 | [Results header, Order by and pagination](#35) | 3.2 | Done |
 | 3.6 | [Individual card template](#36) | 3.2 | Done |
-| 3.7 | [Organization card template](#37) | 3.2 | To do |
+| 3.7 | [Organization card template](#37) | 3.2 | Done |
 | 3.8 | [Directory CSS (Wicket theme tokens) and JS](#38) | 3.2 | To do |
 | 4.1 | [Block editor sidebar, preview and build](#41) | 3.1, 3.2 | To do |
 | 5.1 | [Admin meta box: Directory type and eligibility](#51) | 1.3 | To do |
@@ -562,6 +562,23 @@ templates/cards/card-organization.php.
 **Acceptance criteria:**
 
 - Matches the current CHFA org card content (business type eyebrow, description, contact, website, attribute/certification chips).
+
+**Outcome:** `templates/cards/card-organization.php` and its rules in `assets/css/directory.css`. No renderer or mapper change: `DirectoryRenderer` already located `cards/card-{type}`, and 2.6 already maps the org type, description and logo. Unit tests: `qa/tests/Unit/Directory/CardOrganizationTest.pest.php` (24 tests). They cover every field, escaping, the args passed to each component, the description's short and long forms, each empty row hidden, several picked contacts, and the org type, description and member ID toggles mapped through `EntryMapper` and then rendered. Checked with `wp eval` on the stack: directory 1818's config was swapped in memory for an organization one with every toggle on. Five staging orgs render with their org type labels (e.g. "Task Force"), member IDs, addresses and phones. A `wicket_directory/entry` callback added a logo, an eyebrow, chips and descriptions: the long description collapses to its first 40 words with Show more, the short one shows in full with no toggle, line breaks become `<br>`, and nothing is double-encoded. Staging orgs have no descriptions of their own. Not checked in a browser, so the Alpine toggle is unit tested only (it follows 3.4's See more pattern). Notes for later tickets:
+- **Markup.** The same structure as the individual card, with `wicket-directory-card--organization`:
+  - the logo is `img.wicket-directory-card__image.wicket-directory-card__image--logo` (`alt=""`, lazy);
+  - `p.wicket-directory-card__org-type` (the org type's label) takes the job title's place under the `h3`;
+  - `div.component-card-listing__excerpt.wicket-directory-card__description` comes before the columns.
+  
+  The details, addresses, contacts, Visit Website and chips are the individual card's markup, components and args. There is no post-nominal: the title is the name.
+- **Description.** Plain text, escaped, line breaks through `nl2br()`. Up to 40 words (`wp_trim_words()`, which counts characters for languages that don't split words with spaces) shows in full with no Alpine. A longer one gets `x-data="{ expanded: false }"`:
+  - `p.wicket-directory-card__description-excerpt` holds the first 40 words and `…` (translatable `%s…`), with `x-show="!expanded" x-cloak`;
+  - `p.wicket-directory-card__description-text` holds the full text, with `x-show="expanded"`;
+  - `button.wicket-directory-card__description-toggle` (Show more / Show less, `x-cloak`, `aria-expanded`) controls the wrapper `#{html_id}-{entry id}-description`. The entry ID goes through `sanitize_key()`.
+  
+  Without Alpine the full text shows and the excerpt and toggle stay hidden. With Alpine the full text shows briefly before Alpine starts, as with 3.4's panel. The word count is fixed in the template; a theme override can change it.
+- **Eyebrow and chips.** CHFA's business type label and attribute/certification pills are the card config's `eyebrow` and `tag_chips` data fields. 7.2 sets them up.
+- **CSS.** The org type shares the job title rule. The logo keeps its shape: `--wd-card-image-size` high, up to twice as wide, `object-fit: contain`, no rounding. The description's paragraphs have no margins, and the toggle is a bare, underlined button.
+- **3.8:** fold the toggle's reset into the shared bare-button rule, and check the logo and toggle on a non-Wicket theme.
 
 <a id="38"></a>
 
