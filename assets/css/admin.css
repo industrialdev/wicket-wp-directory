@@ -1,0 +1,534 @@
+/**
+ * Directory edit screen: the settings box.
+ *
+ * WP admin's own palette and the admin colour scheme's accent
+ * (`--wp-admin-theme-color`). Only the edit screen loads it; the frontend
+ * styles are `directory.css`.
+ */
+
+.wicket-directory-admin {
+	--wd-admin-accent: var(--wp-admin-theme-color, #2271b1);
+	--wd-admin-accent-soft: #f0f6fc;
+	--wd-admin-ink: #1d2327;
+	--wd-admin-label: #50575e;
+	--wd-admin-help: #646970;
+	--wd-admin-border: #8c8f94;
+	--wd-admin-border-soft: #c3c4c7;
+	--wd-admin-border-faint: #dcdcde;
+	--wd-admin-surface: #fff;
+	--wd-admin-surface-muted: #f6f7f7;
+	--wd-admin-chip: #e0e0e0;
+	--wd-admin-code: #f0f0f1;
+	--wd-admin-danger: #b32d2e;
+	--wd-admin-danger-soft: #fcf0f1;
+
+	max-width: 760px;
+	padding: 6px 0 4px;
+	color: var(--wd-admin-ink);
+}
+
+.wicket-directory-admin [hidden] {
+	display: none !important;
+}
+
+/* Panels */
+
+.wicket-directory-admin .wd-panel {
+	margin: 0 0 14px;
+	padding: 16px;
+	border: 1px solid var(--wd-admin-border-faint);
+	border-radius: 2px;
+	background: var(--wd-admin-surface);
+	min-width: 0;
+}
+
+.wicket-directory-admin .wd-panel__label {
+	display: block;
+	margin: 0 0 10px;
+	padding: 0;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--wd-admin-label);
+}
+
+.wicket-directory-admin fieldset.wd-panel > legend.wd-panel__label {
+	float: left;
+	width: 100%;
+}
+
+.wicket-directory-admin fieldset.wd-panel > legend.wd-panel__label + * {
+	clear: both;
+}
+
+.wicket-directory-admin .wd-help {
+	margin: 6px 0 0;
+	font-size: 12px;
+	color: var(--wd-admin-help);
+}
+
+.wicket-directory-admin .wd-help--intro {
+	margin: -4px 0 12px;
+}
+
+.wicket-directory-admin .wd-sublabel {
+	display: block;
+	margin: 10px 0 6px;
+	padding: 0;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--wd-admin-label);
+}
+
+.wicket-directory-admin .wd-field {
+	width: 100%;
+	max-width: 420px;
+}
+
+.wicket-directory-admin .notice.inline {
+	margin: 10px 0 0;
+}
+
+.wicket-directory-admin .wd-inline-fields {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+}
+
+.wicket-directory-admin .wd-inline-fields p {
+	flex: 1 1 160px;
+	margin: 0;
+}
+
+.wicket-directory-admin .wd-inline-fields .wd-sublabel {
+	margin-top: 0;
+}
+
+/* Checklist */
+
+.wicket-directory-admin .wd-check {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 5px 0;
+	font-size: 13px;
+}
+
+.wicket-directory-admin .wd-check input {
+	margin: 0;
+}
+
+.wicket-directory-admin .wd-indent {
+	margin: 2px 0 6px 24px;
+}
+
+.wicket-directory-admin .wd-indent > .wd-sublabel:first-child,
+.wicket-directory-admin .wd-indent > fieldset:first-child .wd-sublabel {
+	margin-top: 4px;
+}
+
+.wicket-directory-admin .wd-indent fieldset {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.wicket-directory-admin .wd-divider {
+	margin: 10px 0;
+	border: 0;
+	border-top: 1px solid var(--wd-admin-border-faint);
+}
+
+.wicket-directory-admin .wd-item > .wd-sublabel:first-child {
+	margin-top: 6px;
+}
+
+/* Tabs */
+
+.wicket-directory-admin .wd-tabs {
+	display: flex;
+	gap: 4px;
+	margin-top: 22px;
+	border-bottom: 1px solid var(--wd-admin-border-soft);
+}
+
+.wicket-directory-admin .wd-tab {
+	position: relative;
+	top: 1px;
+	padding: 10px 18px;
+	border: 1px solid transparent;
+	border-bottom: 0;
+	border-radius: 3px 3px 0 0;
+	background: none;
+	font-size: 14px;
+	color: var(--wd-admin-label);
+	cursor: pointer;
+}
+
+.wicket-directory-admin .wd-tab:hover {
+	color: var(--wd-admin-ink);
+}
+
+.wicket-directory-admin .wd-tab.is-active {
+	border-color: var(--wd-admin-border-soft);
+	background: var(--wd-admin-surface);
+	font-weight: 600;
+	color: var(--wd-admin-ink);
+}
+
+.wicket-directory-admin .wd-tab:focus-visible {
+	outline: 2px solid var(--wd-admin-accent);
+	outline-offset: -2px;
+}
+
+.wicket-directory-admin .wd-tabs:not([hidden]) ~ .wd-tabpanel {
+	margin-top: 0;
+	border-color: var(--wd-admin-border-soft);
+	border-top: 0;
+	border-radius: 0 0 2px 2px;
+}
+
+/* Chip picker */
+
+.wicket-directory-admin .wd-chips {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	min-height: 38px;
+	padding: 6px 10px;
+	border: 1px solid var(--wd-admin-border);
+	border-radius: 4px;
+	background: var(--wd-admin-surface);
+}
+
+.wicket-directory-admin .wd-chips__list {
+	display: contents;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.wicket-directory-admin .wd-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin: 0;
+	padding: 2px 4px 2px 10px;
+	border-radius: 2px;
+	background: var(--wd-admin-chip);
+	font-size: 13px;
+	white-space: nowrap;
+}
+
+.wicket-directory-admin .wd-chip__remove {
+	display: inline-flex;
+	padding: 0;
+	border: 0;
+	border-radius: 2px;
+	background: none;
+	color: var(--wd-admin-label);
+	cursor: pointer;
+}
+
+.wicket-directory-admin .wd-chip__remove:hover,
+.wicket-directory-admin .wd-chip__remove:focus-visible {
+	background: rgba(0, 0, 0, 0.1);
+	color: var(--wd-admin-ink);
+}
+
+.wicket-directory-admin .wd-chip__remove .dashicons {
+	width: 18px;
+	height: 18px;
+	font-size: 18px;
+}
+
+.wicket-directory-admin .wd-chips__add {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	padding: 2px 10px 2px 6px;
+	border: 1px dashed var(--wd-admin-border-soft);
+	border-radius: 2px;
+	font-size: 13px;
+	color: var(--wd-admin-accent);
+	cursor: pointer;
+	list-style: none;
+}
+
+.wicket-directory-admin .wd-chips__add::-webkit-details-marker {
+	display: none;
+}
+
+.wicket-directory-admin .wd-chips__add:hover,
+.wicket-directory-admin [open] > .wd-chips__add {
+	border-color: var(--wd-admin-accent);
+	background: var(--wd-admin-accent-soft);
+}
+
+.wicket-directory-admin .wd-chips__add .dashicons {
+	width: 16px;
+	height: 16px;
+	font-size: 16px;
+}
+
+/* Popovers: the chip menu and the facet picker */
+
+.wicket-directory-admin .wd-popover {
+	position: relative;
+}
+
+.wicket-directory-admin .wd-popover > summary {
+	list-style: none;
+}
+
+.wicket-directory-admin .wd-popover > summary::-webkit-details-marker {
+	display: none;
+}
+
+.wicket-directory-admin .wd-menu {
+	position: absolute;
+	z-index: 20;
+	top: calc(100% + 6px);
+	left: 0;
+	min-width: 240px;
+	max-height: 280px;
+	margin: 0;
+	padding: 4px;
+	overflow-y: auto;
+	border: 1px solid var(--wd-admin-border-soft);
+	border-radius: 3px;
+	background: var(--wd-admin-surface);
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
+}
+
+.wicket-directory-admin .wd-menu__group {
+	margin: 10px 10px 4px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--wd-admin-help);
+}
+
+.wicket-directory-admin .wd-menu > .wd-menu__group:first-of-type {
+	margin-top: 6px;
+}
+
+.wicket-directory-admin .wd-menu__item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 10px;
+	border-radius: 2px;
+	font-size: 13px;
+	cursor: pointer;
+}
+
+.wicket-directory-admin .wd-menu__item:hover {
+	background: var(--wd-admin-accent-soft);
+}
+
+.wicket-directory-admin .wd-menu__item input {
+	margin: 0;
+}
+
+/* Filters: facet rows */
+
+.wicket-directory-admin .wd-facets {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin-bottom: 12px;
+}
+
+.wicket-directory-admin .wd-facets:empty {
+	display: none;
+}
+
+.wicket-directory-admin .wd-facet {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 12px;
+	padding: 12px 14px;
+	border: 1px solid var(--wd-admin-border-faint);
+	border-radius: 3px;
+	background: var(--wd-admin-surface);
+}
+
+.wicket-directory-admin .wd-facet__move {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	align-self: center;
+}
+
+.wicket-directory-admin .wd-facet__move .wd-icon-button {
+	width: 24px;
+	height: 18px;
+}
+
+.wicket-directory-admin .wd-facet__field {
+	display: flex;
+	flex: 0 1 220px;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 4px;
+	min-width: 0;
+}
+
+.wicket-directory-admin .wd-facet__label {
+	flex: 1 1 200px;
+	min-width: 0;
+}
+
+.wicket-directory-admin .wd-facet__label .wd-field {
+	max-width: none;
+}
+
+.wicket-directory-admin .wd-caption {
+	display: block;
+	margin-bottom: 6px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--wd-admin-help);
+}
+
+.wicket-directory-admin .wd-code {
+	padding: 2px 6px;
+	border-radius: 3px;
+	background: var(--wd-admin-code);
+	font-size: 11px;
+	white-space: nowrap;
+}
+
+.wicket-directory-admin .wd-icon-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	padding: 0;
+	border: 1px solid var(--wd-admin-border-soft);
+	border-radius: 3px;
+	background: var(--wd-admin-surface);
+	color: var(--wd-admin-label);
+	cursor: pointer;
+}
+
+.wicket-directory-admin .wd-icon-button:hover:not(:disabled) {
+	border-color: var(--wd-admin-border);
+	background: var(--wd-admin-surface-muted);
+}
+
+.wicket-directory-admin .wd-icon-button:disabled {
+	opacity: 0.35;
+	cursor: not-allowed;
+}
+
+.wicket-directory-admin .wd-icon-button--delete {
+	color: var(--wd-admin-danger);
+}
+
+.wicket-directory-admin .wd-icon-button--delete:hover:not(:disabled) {
+	border-color: var(--wd-admin-danger);
+	background: var(--wd-admin-danger-soft);
+}
+
+/* Filters: the Add filter field picker */
+
+.wicket-directory-admin .wd-fieldpicker {
+	display: inline-block;
+}
+
+.wicket-directory-admin .wd-fieldpicker > summary.button {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.wicket-directory-admin .wd-fieldpicker > summary .dashicons {
+	width: 16px;
+	height: 16px;
+	font-size: 16px;
+}
+
+.wicket-directory-admin .wd-fieldpicker__panel {
+	position: absolute;
+	z-index: 20;
+	top: calc(100% + 4px);
+	left: 0;
+	display: flex;
+	flex-direction: column;
+	width: 340px;
+	max-width: calc(100vw - 60px);
+	max-height: 420px;
+	border: 1px solid var(--wd-admin-border-soft);
+	border-radius: 4px;
+	background: var(--wd-admin-surface);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+
+.wicket-directory-admin .wd-fieldpicker__search {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--wd-admin-border-faint);
+	color: var(--wd-admin-help);
+}
+
+.wicket-directory-admin .wd-fieldpicker__search input {
+	flex: 1;
+	min-height: 28px;
+	border: 0;
+	box-shadow: none;
+}
+
+.wicket-directory-admin .wd-fieldpicker__list {
+	padding: 4px 0;
+	overflow-y: auto;
+}
+
+.wicket-directory-admin .wd-fieldpicker__row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 14px;
+	width: 100%;
+	padding: 7px 14px;
+	border: 0;
+	background: var(--wd-admin-surface);
+	text-align: left;
+	font: inherit;
+	cursor: pointer;
+}
+
+.wicket-directory-admin .wd-fieldpicker__row:hover:not(:disabled),
+.wicket-directory-admin .wd-fieldpicker__row:focus-visible {
+	background: var(--wd-admin-accent-soft);
+}
+
+.wicket-directory-admin .wd-fieldpicker__row:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.wicket-directory-admin .wd-fieldpicker__label {
+	font-size: 13px;
+	color: var(--wd-admin-ink);
+}
+
+.wicket-directory-admin .wd-fieldpicker__empty {
+	margin: 0;
+	padding: 14px;
+	font-size: 13px;
+	color: var(--wd-admin-help);
+}

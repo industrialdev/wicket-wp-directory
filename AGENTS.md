@@ -48,11 +48,15 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
     DirectoryPostType            (landed) CPT `wicket_directory` (caps → manage_options, classic editor) + `_wicket_directory_config` post meta (REST `edit` context only)
                                  + read-only `directory_type` REST field (`view` context), so the block editor knows each directory's type
       → Config\DirectoryConfig   (landed) typed config: defaults(type), from_post(post), sanitize(input, ?previous), to_array(); Config\DirectoryType enum
-    Admin\DirectoryMetaBoxes     (landed, admin only) classic edit screen meta boxes; posts `wicket_directory[...]`; save_post handler lays the
-                                 posted SECTIONS (`type`, `eligibility`, `card`, `facets`) over the stored config → DirectoryConfig::sanitize(…, previous)
-                                 (nonce, manage_options + edit_post); boxes: Directory (views/directory.php), Card (views/card.php; card_fields(type) lists its controls),
-                                 Filters (views/filters.php; facet_choices(type, schemas) = org type + enum data fields; a hidden `facets` marker lets "no rows" save);
-                                 data-field pickers post "schema_key.field"; assets/js/admin.js toggles type-specific elements in every box and runs the facet repeater
+    Admin\DirectoryMetaBoxes     (landed, admin only) one "Directory settings" meta box (render_box → views/settings.php); posts `wicket_directory[...]`;
+                                 save_post handler lays the posted SECTIONS (`type`, `eligibility`, `card`, `facets`) over the stored config
+                                 → DirectoryConfig::sanitize(…, previous) (nonce, manage_options + edit_post). Directory panels on top (views/directory.php:
+                                 type select, chip pickers for tiers/org types, active-members, opt-in), then tabs Card View (views/card.php; one checklist in
+                                 card_groups(type) order, card_fields(type) lists its controls; ticked items reveal their options) and Filters
+                                 (views/filters.php; facet_choices(type, schemas) = org type + enum data fields; a hidden `facets` marker lets "no rows" save;
+                                 searchable picker); views/chip-picker.php is the shared multi-select. Data-field pickers post "schema_key.field".
+                                 assets/js/admin.js (no build): type toggles, tabs, popovers, chips, reveals and contact hints, facet repeater;
+                                 assets/css/admin.css styles the box. Everything posts the same without the script
       → Admin\MembershipTiers    (landed) tier choices from GET memberships, filtered by type
       → Admin\ResourceTypes      (landed) one GET resource_types: org types and contact record types (ContactResolver::RELATIONSHIPS)
       → Admin\SchemaFields       (landed) GET json_schemas?include=json_schema_resources: the type's text/list data fields, with an enum flag

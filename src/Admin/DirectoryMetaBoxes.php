@@ -12,14 +12,15 @@ use Wicket\Directory\Query\RequestParams;
 use WP_Post;
 
 /**
- * Meta boxes on the classic directory edit screen, and their save handler.
+ * The settings meta box on the classic directory edit screen, and its save handler.
  *
- * Every box posts its part of the config under one field
- * (`wicket_directory[...]`). The save handler lays the posted sections over the
- * stored config, so a section with no box keeps its stored value, and runs the
- * result through DirectoryConfig::sanitize() with the stored config as
- * `$previous`. That resets the type's settings on a type change and bumps
- * cache_version.
+ * One box holds the whole config: the Directory panels (type and eligibility)
+ * on top, then the Card View and Filters tabs. Each part posts its sections of
+ * the config under one field (`wicket_directory[...]`). The save handler lays
+ * the posted sections over the stored config, so a section that wasn't posted
+ * keeps its stored value, and runs the result through
+ * DirectoryConfig::sanitize() with the stored config as `$previous`. That
+ * resets the type's settings on a type change and bumps cache_version.
  *
  * Views live in `src/Admin/views/` and aren't theme-overridable.
  */
@@ -41,8 +42,8 @@ final class DirectoryMetaBoxes
     public const NONCE_FIELD = '_wicket_directory_nonce';
 
     /**
-     * Config sections the meta boxes post. Each one replaces the stored
-     * section as a whole, so every field of a section must be in its box.
+     * Config sections the box posts. Each one replaces the stored section as
+     * a whole, so every field of a section must have a control.
      */
     public const SECTIONS = ['type', 'eligibility', 'card', 'facets'];
 
@@ -50,6 +51,11 @@ final class DirectoryMetaBoxes
      * Script handle for the edit screen.
      */
     public const SCRIPT_HANDLE = 'wicket-directory-admin';
+
+    /**
+     * Style handle for the edit screen.
+     */
+    public const STYLE_HANDLE = 'wicket-directory-admin';
 
     /**
      * Membership tier choices.
@@ -67,7 +73,7 @@ final class DirectoryMetaBoxes
     private SchemaFields $schema_fields;
 
     /**
-     * Each data source is loaded once, however many boxes use it. Tests pass
+     * Each data source is loaded once, however many panels use it. Tests pass
      * ones with fake loaders.
      *
      * @param MembershipTiers|null $tiers          Tier choices.
@@ -91,10 +97,11 @@ final class DirectoryMetaBoxes
         add_action('add_meta_boxes_' . DirectoryPostType::POST_TYPE, [$this, 'add_meta_boxes']);
         add_action('save_post_' . DirectoryPostType::POST_TYPE, [$this, 'save'], 10, 2);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_assets']);
+        add_filter('enter_title_here', [$this, 'title_placeholder'], 10, 2);
     }
 
     /**
-     * Add the meta boxes.
+     * Add the settings box.
      *
      * @return void
      */
@@ -102,26 +109,8 @@ final class DirectoryMetaBoxes
     {
         add_meta_box(
             'wicket-directory-settings',
-            __('Directory', 'wicket-directory'),
-            [$this, 'render_directory_box'],
-            DirectoryPostType::POST_TYPE,
-            'normal',
-            'high'
-        );
-
-        add_meta_box(
-            'wicket-directory-card',
-            __('Card', 'wicket-directory'),
-            [$this, 'render_card_box'],
-            DirectoryPostType::POST_TYPE,
-            'normal',
-            'high'
-        );
-
-        add_meta_box(
-            'wicket-directory-filters',
-            __('Filters', 'wicket-directory'),
-            [$this, 'render_filters_box'],
+            __('Directory settings', 'wicket-directory'),
+            [$this, 'render_box'],
             DirectoryPostType::POST_TYPE,
             'normal',
             'high'
@@ -129,7 +118,43 @@ final class DirectoryMetaBoxes
     }
 
     /**
-     * Print the Directory box: type and eligibility.
+     * Print the settings box: the nonce, the Directory panels, then the Card
+     * View and Filters tabs.
+     *
+     * @param WP_Post $post Directory being edited.
+     *
+     * @return void
+     */
+    public function render_box(WP_Post $post): void
+    {
+        wp_nonce_field(self::NONCE_ACTION, self::NONCE_FIELD);
+
+        $this->view('settings', [
+            'directory' => fn () => $this->render_directory_box($post),
+            'tabs'      => [
+                'card'    => [__('Card View', 'wicket-directory'), fn () => $this->render_card_box($post)],
+                'filters' => [__('Filters', 'wicket-directory'), fn () => $this->render_filters_box($post)],
+            ],
+        ]);
+    }
+
+    /**
+     * The title field's placeholder on the directory edit screen.
+     *
+     * @param string $placeholder The default placeholder.
+     * @param mixed  $post        Post being edited (WordPress passes a WP_Post).
+     *
+     * @return string
+     */
+    public function title_placeholder(string $placeholder, mixed $post = null): string
+    {
+        return $post instanceof WP_Post && $post->post_type === DirectoryPostType::POST_TYPE
+            ? __('Directory name, e.g. Individual Members', 'wicket-directory')
+            : $placeholder;
+    }
+
+    /**
+     * Print the Directory panels: type and eligibility.
      *
      * Tiers are listed for the stored type only. A type change clears them on
      * save, so the box asks the admin to save before choosing new ones.
@@ -148,8 +173,6 @@ final class DirectoryMetaBoxes
         $tiers = $this->tiers->for_type($config->type, $lang);
         $org_types = $this->resource_types->for('organizations', $lang);
 
-        wp_nonce_field(self::NONCE_ACTION, self::NONCE_FIELD);
-
         $this->view('directory', [
             'field'           => self::FIELD,
             'config'          => $config,
@@ -164,12 +187,12 @@ final class DirectoryMetaBoxes
     }
 
     /**
-     * Print the Card box: what each card shows.
+     * Print the Card View tab: what each card shows.
      *
-     * Only the saved type's settings are shown. A type change resets the card
-     * on save, so the box asks the admin to save first. As in the Directory
-     * box, saved data fields and contact types the MDP no longer lists are
-     * still offered, selected.
+     * Only the saved type's settings are shown, in card_groups() order. A type
+     * change resets the card on save, so the tab asks the admin to save first.
+     * As in the Directory panels, saved data fields and contact types the MDP
+     * no longer lists are still offered, selected.
      *
      * @param WP_Post $post Directory being edited.
      *
@@ -198,6 +221,7 @@ final class DirectoryMetaBoxes
 
             $contacts[$key] = [
                 'label' => $fields['contacts'][$key],
+                'noun'  => self::contact_nouns()[$key],
                 /* translators: %s: Contact record type slug. */
                 'types' => self::with_saved($this->resource_types->for($resource_type, $lang), $saved, __('Unknown type (%s)', 'wicket-directory')),
             ];
@@ -206,6 +230,7 @@ final class DirectoryMetaBoxes
         $this->view('card', [
             'field'                 => self::FIELD,
             'config'                => $config,
+            'groups'                => self::card_groups($config->type),
             'toggles'               => $fields['toggles'],
             'refs'                  => $refs,
             'tag_chips'             => self::ref_choices($schemas, [SchemaFields::KIND_TEXT, SchemaFields::KIND_LIST], $tag_values),
@@ -222,7 +247,7 @@ final class DirectoryMetaBoxes
     }
 
     /**
-     * Print the Filters box: the facets visitors refine results with.
+     * Print the Filters tab: the facets visitors refine results with.
      *
      * Rows are the configured facets, in order. The add picker offers every
      * data field with an enum (a facet's choices come from it) and, for
@@ -257,7 +282,14 @@ final class DirectoryMetaBoxes
                 'name'        => $available[$key]['name'] ?? $facet['schema_key'] . '.' . $facet['field'],
                 'placeholder' => self::facet_placeholder($facet),
                 'available'   => isset($available[$key]),
+                'code'        => self::facet_code($facet),
             ];
+        }
+
+        foreach ($choices as $group => $group_choices) {
+            foreach ($group_choices as $key => $choice) {
+                $choices[$group][$key]['code'] = self::facet_code($choice);
+            }
         }
 
         $this->view('filters', [
@@ -307,7 +339,7 @@ final class DirectoryMetaBoxes
     }
 
     /**
-     * Load the edit screen script on directory edit screens only.
+     * Load the edit screen script and styles on directory edit screens only.
      *
      * @param string $hook_suffix The current admin page.
      *
@@ -324,6 +356,13 @@ final class DirectoryMetaBoxes
         if ($screen === null || $screen->post_type !== DirectoryPostType::POST_TYPE) {
             return;
         }
+
+        wp_enqueue_style(
+            self::STYLE_HANDLE,
+            WICKET_DIRECTORY_URL . 'assets/css/admin.css',
+            [],
+            WICKET_DIRECTORY_VERSION
+        );
 
         wp_enqueue_script(
             self::SCRIPT_HANDLE,
@@ -427,6 +466,40 @@ final class DirectoryMetaBoxes
     }
 
     /**
+     * The order of the Card View list: groups of card keys, shown with a
+     * divider between groups.
+     *
+     * Every key of card_fields() is in exactly one group, plus `tag_chips`.
+     * `address_format` and `website_label` are shown under their contact rule.
+     *
+     * @param DirectoryType $type Directory type.
+     *
+     * @return list<list<string>>
+     */
+    public static function card_groups(DirectoryType $type): array
+    {
+        $shared = [
+            ['eyebrow', 'tag_chips'],
+            ['address'],
+            ['member_id', 'membership_tier'],
+            ['email', 'phone'],
+            ['website'],
+        ];
+
+        return match ($type) {
+            DirectoryType::Individual => [
+                ['profile_image', 'salutation', 'post_nominal', 'middle_name', 'suffix'],
+                ['job_title'],
+                ...$shared,
+            ],
+            DirectoryType::Organization => [
+                ['logo', 'org_type', 'description'],
+                ...$shared,
+            ],
+        };
+    }
+
+    /**
      * The facets a directory of this type can add, grouped for the picker.
      *
      * Keys are RequestParams::facet_key(), which is also what makes two
@@ -492,6 +565,35 @@ final class DirectoryMetaBoxes
         return $facet['source'] === DirectoryConfig::FACET_ORG_TYPE
             ? __('Organization type', 'wicket-directory')
             : $facet['field'];
+    }
+
+    /**
+     * The code shown next to a facet: `org_type`, or `"schema_key.field"`.
+     *
+     * @param array{source: string, schema_key: string, field: string} $facet Facet.
+     *
+     * @return string
+     */
+    private static function facet_code(array $facet): string
+    {
+        return $facet['source'] === DirectoryConfig::FACET_ORG_TYPE
+            ? DirectoryConfig::FACET_ORG_TYPE
+            : $facet['schema_key'] . '.' . $facet['field'];
+    }
+
+    /**
+     * The contact rules' records in lower case, for the hints.
+     *
+     * @return array<string, string>
+     */
+    private static function contact_nouns(): array
+    {
+        return [
+            'address' => __('address', 'wicket-directory'),
+            'email'   => __('email', 'wicket-directory'),
+            'phone'   => __('phone number', 'wicket-directory'),
+            'website' => __('website', 'wicket-directory'),
+        ];
     }
 
     /**

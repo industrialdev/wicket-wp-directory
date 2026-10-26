@@ -38,6 +38,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | 5.2 | [Admin meta box: Card configuration](#52) | 5.1 | Done |
 | 5.3 | [Admin meta box: Filters (facets)](#53) | 5.1, 2.7 | Done |
 | 5.4 | [Admin list table columns](#54) | 1.2 | Done |
+| 5.5 | [Admin edit screen: designer's layout](#55) | 5.1, 5.2, 5.3 | Done |
 | 6.1 | [Register the plugin in the QA suite and stack docs](#61) | 1.1 | To do |
 | 6.2 | [Unit tests for config, query and data classes](#62) | 6.1 | To do |
 | 6.3 | [WordPress integration tests](#63) | 6.1 | To do |
@@ -742,6 +743,28 @@ src/Admin/ListColumns.php: add Type and Status columns to All Directories. No sh
 - Columns `wicket_directory_type` and `wicket_directory_status` go right after Title (at the end if a list has no title column). Type is `DirectoryType::label()` from `DirectoryConfig::from_post()`, so an unconfigured directory shows the default, Individual. Status is the registered status label; every status but `publish` adds "Not shown on the site", because only published directories render.
 - Neither new column is sortable (the type lives inside the serialized config). Title and Date stay WordPress's own.
 - Verified with `WP_Posts_List_Table` in the local stack: columns `cb, title, Type, Status, date`, sortable `title` and `date`, and correct cells for a published organization directory and a draft individual one.
+
+<a id="55"></a>
+
+### 5.5 — Admin edit screen: designer's layout
+
+**Depends on:** 5.1, 5.2, 5.3
+
+Rebuild the edit screen after the designer's "Member Directory Block" prototype (WP Admin Config → Edit Directory), within the MVP scope: no shortcode panel, no phase 2 parts (Advance Configurations, Developer tab, Groups, Organization Contact, live preview). The saved config doesn't change.
+
+**Acceptance criteria:**
+
+- The posted fields and the saved config are the same as before; a rendered box posts back unchanged.
+- The box works without `admin.js` (every panel and option shown).
+
+**Outcome:** the three boxes are now one **Directory settings** box (`render_box()`, `views/settings.php`): the Directory panels, then **Card View** and **Filters** tabs. `render_directory_box()`, `render_card_box()` and `render_filters_box()` print the parts; only `render_box()` prints the nonce. New `views/chip-picker.php`, `assets/css/admin.css` (enqueued with the script) and an `enter_title_here` placeholder for the directory name. Unit tests: the three box tests in `qa/tests/Unit/Directory/` were rewritten for the new markup and their round trips now go through `render_box()`. Notes:
+- **Type** is a select (was radios). `admin.js` listens to it.
+- **Chip pickers** (tiers, org types, tags): the "Add" menu is a `<details>` of the same checkboxes as before, so they post as before; the chips only mirror what's ticked.
+- **Card View** is one checklist in `DirectoryMetaBoxes::card_groups($type)` order (a test checks it lists every card key once). A data-field item (profile image, logo, post-nominal, eyebrow) has an unposted checkbox: unticking it disables the picker, so the reference saves as off. Contact rules reveal format, type, flags and four hints (`data-wd-hint`: none, directory, primary, both; website has two), and the script shows the one that matches the flags.
+- **Filters**: rows are a card list with arrow, field code, label and delete buttons; the add picker is a searchable popover (Enter adds the first match). Choices carry their code (`org_type` or `schema_key.field`).
+- The tab bar stays `hidden` without the script; the last tab is remembered in `sessionStorage`.
+- Not in the prototype but kept: Only list active members, the opt-in data field, Eyebrow, Tags, Description. In the prototype but not in the config (left out): Designation, Employer, Person ⟷ Org relationship types, the "Display Contact Details" parent toggle.
+- Verified: unit tests; `admin.js` driven in jsdom against the box rendered by the local stack for a real directory (tabs, chips, reveals, hints, facet add/move/remove/search, type switch), and the untouched form, posted with the script running, sanitizes back to the stored config. Not checked visually in WP admin.
 
 ## 6. QA & registration
 

@@ -228,12 +228,12 @@ There is **no shortcode**. The block is the single embed point, and all per-plac
 ## Admin screen (classic meta boxes)
 All Directories is the native list table, with Type and Status columns. No shortcode column; directories are placed with the block.
 
-The Edit screen has these meta boxes:
-1. **Directory:** Type and Eligibility.
-2. **Card:** the toggles, with the contact-rule fieldset repeated for each contact field and hint text explaining the truth table.
-3. **Filters:** a facet repeater with add, remove and reorder. Facet choices come from `wicket_get_schemas()` and org types. (Show/hide of keyword, location, filters and Order by is a block setting, not a directory setting.)
+The Edit screen has one **Directory settings** meta box, laid out after the designer's prototype (single column of panels, tabs, chip pickers):
+1. **Directory panels:** Type (a select), then Eligibility: organization types (organization only) and membership tiers as chip pickers, Only list active members, and the opt-in data field.
+2. **Card View tab:** one checklist, grouped with dividers. A ticked item reveals its options indented below it: a data-field picker, or a contact rule's format, type and flags. The contact hint changes to match the ticked flags (the truth table).
+3. **Filters tab:** a facet repeater with add, remove and reorder, and a searchable field picker. Facet choices come from `wicket_get_schemas()` and org types. (Show/hide of keyword, location, filters and Order by is a block setting, not a directory setting.)
 
-Publish and Save Draft are WordPress's own. The block editor preview serves as the live preview for the MVP.
+The directory name is the post title. Publish and Save Draft are WordPress's own. The block editor preview serves as the live preview for the MVP. The prototype's Shortcode panel, Advance Configurations, Developer tab, Groups type, Organization Contact and live card preview are left out (no shortcodes; the rest is phase 2).
 
 ## Stack registration (file changes only, in each repo's working tree)
 - **`qa`:**
