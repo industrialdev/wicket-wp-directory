@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace Wicket\Directory\Block;
 
+use Wicket\Directory\Config\DirectoryType;
 use Wicket\Directory\Render\DirectoryRenderer;
 
 /**
  * The dynamic `wicket/directory` block: the only way to place a directory.
  *
- * block.json holds the attributes and assets. The render callback serves both
- * the frontend and the editor preview (ServerSideRender), so there is one
- * render path.
+ * block.json holds the attributes and assets. The editor script is built from
+ * blocks/directory into build/directory (`npm run build`), and the block
+ * registers from the build, which carries a copy of block.json. The render
+ * callback serves both the frontend and the editor preview (ServerSideRender),
+ * so there is one render path.
  *
  * directory.css is the block's `viewStyle` and `editorStyle`, not its `style`:
  * classic themes load every block's `style` on every page, but a view style
@@ -29,6 +32,11 @@ final class DirectoryBlock
      * active, so add_category() adds it when it's missing.
      */
     public const CATEGORY = 'wicket';
+
+    /**
+     * Global the editor script reads its data from; see editor_data().
+     */
+    public const EDITOR_DATA_VAR = 'wicketDirectoryEditor';
 
     /**
      * Renders the block; see renderer().
@@ -52,17 +60,18 @@ final class DirectoryBlock
     {
         add_action('init', [$this, 'register_block']);
         add_action('wp_enqueue_scripts', [$this, 'enqueue_style']);
+        add_action('enqueue_block_editor_assets', [$this, 'enqueue_editor_data']);
         add_filter('block_categories_all', [$this, 'add_category']);
     }
 
     /**
-     * Register the block from its block.json.
+     * Register the block from the built block.json.
      *
      * @return void
      */
     public function register_block(): void
     {
-        register_block_type(dirname(__DIR__, 2) . '/blocks/directory', [
+        register_block_type(dirname(__DIR__, 2) . '/build/directory', [
             'render_callback' => [$this, 'render'],
         ]);
     }
@@ -82,6 +91,42 @@ final class DirectoryBlock
         if (is_singular() && has_block(self::NAME, get_queried_object_id())) {
             wp_enqueue_style(generate_block_asset_handle(self::NAME, 'viewStyle'));
         }
+    }
+
+    /**
+     * Give the editor script the sort options of each directory type.
+     *
+     * The Default Sort Order control lists them for the selected directory's
+     * type. They come from DirectoryType so the editor offers exactly the
+     * tokens BlockAttributes accepts, with the same translated labels.
+     *
+     * @return void
+     */
+    public function enqueue_editor_data(): void
+    {
+        wp_add_inline_script(
+            generate_block_asset_handle(self::NAME, 'editorScript'),
+            sprintf('window.%s = %s;', self::EDITOR_DATA_VAR, wp_json_encode(self::editor_data(), JSON_HEX_TAG | JSON_HEX_AMP)),
+            'before'
+        );
+    }
+
+    /**
+     * Data for the editor script.
+     *
+     * @return array{sortOptions: array<string, list<array{value: string, label: string}>>}
+     */
+    public static function editor_data(): array
+    {
+        $sort_options = [];
+
+        foreach (DirectoryType::cases() as $type) {
+            foreach ($type->sort_options() as $value => $label) {
+                $sort_options[$type->value][] = ['value' => $value, 'label' => $label];
+            }
+        }
+
+        return ['sortOptions' => $sort_options];
     }
 
     /**

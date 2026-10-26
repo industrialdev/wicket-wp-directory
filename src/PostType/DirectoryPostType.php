@@ -32,6 +32,11 @@ final class DirectoryPostType
     public const CAPABILITY = 'manage_options';
 
     /**
+     * REST field with the directory's type, readable in the `view` context.
+     */
+    public const TYPE_REST_FIELD = 'directory_type';
+
+    /**
      * Hook into WordPress.
      *
      * @return void
@@ -40,6 +45,7 @@ final class DirectoryPostType
     {
         add_action('init', [$this, 'register_post_type']);
         add_action('init', [$this, 'register_meta']);
+        add_action('rest_api_init', [$this, 'register_rest_fields']);
         add_filter('use_block_editor_for_post_type', [$this, 'disable_block_editor'], 10, 2);
         add_action('add_meta_boxes_' . self::POST_TYPE, [$this, 'remove_custom_fields_box']);
         add_filter('post_updated_messages', [$this, 'updated_messages']);
@@ -147,6 +153,47 @@ final class DirectoryPostType
                 'schema' => $this->rest_schema(),
             ],
         ]);
+    }
+
+    /**
+     * Register the `directory_type` REST field.
+     *
+     * The block editor needs each directory's type for its Default Sort Order
+     * options, and lists directories in the `view` context so editors who
+     * aren't admins can place the block. The config meta is edit-context only,
+     * so the type gets a read-only field of its own. Only the type is exposed:
+     * it is no more private than the title, which `view` already returns for a
+     * published directory.
+     *
+     * @return void
+     */
+    public function register_rest_fields(): void
+    {
+        register_rest_field(self::POST_TYPE, self::TYPE_REST_FIELD, [
+            'get_callback' => [$this, 'get_rest_type'],
+            'schema'       => [
+                'description' => __('Directory type.', 'wicket-directory'),
+                'type'        => 'string',
+                'enum'        => DirectoryType::values(),
+                'context'     => ['view', 'edit'],
+                'readonly'    => true,
+            ],
+        ]);
+    }
+
+    /**
+     * Value of the `directory_type` REST field.
+     *
+     * @param array<string, mixed> $data Prepared post data; `id` is the post ID.
+     *
+     * @return string|null The type's backing value, or null when the post isn't a directory.
+     */
+    public function get_rest_type(array $data): ?string
+    {
+        $id = (int) ($data['id'] ?? 0);
+
+        // get_post(0) falls back to the global post, so don't ask for it.
+        return $id > 0 ? DirectoryConfig::from_post($id)?->type->value : null;
     }
 
     /**

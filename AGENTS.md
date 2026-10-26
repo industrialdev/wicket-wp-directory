@@ -12,7 +12,7 @@ MVP scope: Individual and Organization directories only. These are deferred to p
 
 ## Commands
 
-The composer scripts exist (ticket 1.1). `package.json` and the npm scripts arrive with the block editor build (ticket 4.1). Composer isn't installed on the host: run it in the stack's PHP container (`docker exec -w /var/www/html/web/app/plugins/wicket-wp-directory wicket-wp-stack-php-1 composer …`).
+The composer scripts exist (ticket 1.1), and the npm scripts (ticket 4.1). npm pins Node through Volta (`package.json` `volta`), so run them with `volta run npm …` if Volta isn't your default. Composer isn't installed on the host: run it in the stack's PHP container (`docker exec -w /var/www/html/web/app/plugins/wicket-wp-directory wicket-wp-stack-php-1 composer …`).
 
 ```bash
 composer install          # Install dependencies (including dev)
@@ -21,10 +21,11 @@ composer cs:fix           # Fix code style
 composer production       # Fix style → remove dev deps → optimise autoloader (run before tagging)
 npm run build             # Build the block editor script (@wordpress/scripts) into build/
 npm run start             # Watch mode for the block editor script
+npm run lint:js           # Lint blocks/ (@wordpress/eslint-plugin)
 php -l <file>             # Quick PHP syntax check
 ```
 
-`build/` is kept in the repo because releases don't run a JS build. Rebuild after any change under `blocks/`.
+`build/` is kept in the repo because releases don't run a JS build. Rebuild after any change under `blocks/`, including `block.json`: the block registers from the copy in `build/directory/`. `qa`'s `DirectoryBlockTest` fails when the two differ.
 
 Tests live in the shared QA suite at `../../../../../../qa/`, never in this repo. See [Tests](#tests). Read `qa/README.md` and `qa/AGENTS.md` before adding any.
 
@@ -45,10 +46,13 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
   dependency guard               (landed) function_exists('Wicket') → else admin notice + early return; activation hook checks PHP + base
   Plugin::get_instance()         (landed) singleton; plugin_setup() on plugins_loaded:100 (after the base plugin's :99 setup); text domain
     DirectoryPostType            (landed) CPT `wicket_directory` (caps → manage_options, classic editor) + `_wicket_directory_config` post meta (REST `edit` context only)
+                                 + read-only `directory_type` REST field (`view` context), so the block editor knows each directory's type
       → Config\DirectoryConfig   (landed) typed config: defaults(type), from_post(post), sanitize(input, ?previous), to_array(); Config\DirectoryType enum
     DirectoryMetaBoxes           classic edit screen (block editor disabled for this CPT)
-    Block\DirectoryBlock         (landed) dynamic block `wicket/directory` from blocks/directory/block.json; adds the `wicket` category if missing; render_callback → DirectoryRenderer;
-                                 enqueue_style() puts directory.css in the <head> of a post that has the block
+    Block\DirectoryBlock         (landed) dynamic block `wicket/directory` registered from build/directory (built from blocks/directory); adds the `wicket` category if missing;
+                                 render_callback → DirectoryRenderer; enqueue_style() puts directory.css in the <head> of a post that has the block;
+                                 enqueue_editor_data() prints window.wicketDirectoryEditor.sortOptions (DirectoryType::sort_options() per type) before the editor script
+      blocks/directory/edit.js   (landed) sidebar (published directories via useEntityRecords, context view), Placeholder, ServerSideRender in <Disabled>, unpublished-selection Notice
       → Block\BlockAttributes    (landed) from_array(attributes): sanitized, resultsPerPage clamped 1–50; sort(DirectoryType) resolves defaultSort
 ```
 

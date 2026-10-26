@@ -2,7 +2,7 @@
 title: "MVP Plan"
 audience: [developer, agent]
 status: approved
-updated: 2026-10-02
+updated: 2026-10-26
 ---
 
 > Implementation plan for the MVP (Individual + Organization directories). Source files referenced below don't exist yet; they are the planned layout. Update this doc as decisions change.
@@ -212,7 +212,7 @@ There is **no shortcode**. The block is the single embed point, and all per-plac
 |---|---|---|---|
 | Directory | `directoryId` | int, `0` | `SelectControl` of **published** directories only (`useEntityRecords('postType','wicket_directory',{status:'publish',per_page:-1})`). With none selected the canvas shows a Placeholder prompting a choice. |
 | Default Sort Order | `defaultSort` | string, `''` (= first option for the type) | Options depend on the selected directory's type. Individual: First Name A–Z / Z–A, Last Name A–Z / Z–A. Organization: Name A–Z / Z–A. Reset to the type's first option when the directory changes. Visitors can still change it via Order by unless that's hidden. |
-| Number of Results to Display | `resultsPerPage` | int, `6` | `NumberControl`, clamped server-side to 1–50. Page size before pagination. |
+| Number of Results to Display | `resultsPerPage` | int, `6` | `RangeControl` (slider + number field; `NumberControl` is still experimental), clamped to 1–50 in the editor and server-side. Page size before pagination. |
 | Hide Keyword Search | `hideKeyword` | bool, `false` | `ToggleControl`. |
 | Hide Location Search | `hideLocation` | bool, `false` | `ToggleControl`. |
 | Hide Filters | `hideFilters` | bool, `false` | Hides the Refine Results panel. Help text notes it only appears when the directory has facets configured. |

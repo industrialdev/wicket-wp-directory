@@ -149,6 +149,7 @@ $finder = PhpCsFixer\Finder::create()
     'docs',
     'languages',
     'dist',
+    'build',
     ])
     ->name('*.php')
     ->notName([

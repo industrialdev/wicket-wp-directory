@@ -1,7 +1,7 @@
 ---
 title: "MVP Tickets"
 audience: [developer, agent]
-updated: 2026-10-22
+updated: 2026-10-26
 ---
 
 # `wicket-wp-directory` MVP tickets
@@ -33,7 +33,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | 3.6 | [Individual card template](#36) | 3.2 | Done |
 | 3.7 | [Organization card template](#37) | 3.2 | Done |
 | 3.8 | [Directory CSS (Wicket theme tokens) and JS](#38) | 3.2 | Done |
-| 4.1 | [Block editor sidebar, preview and build](#41) | 3.1, 3.2 | To do |
+| 4.1 | [Block editor sidebar, preview and build](#41) | 3.1, 3.2 | Done |
 | 5.1 | [Admin meta box: Directory type and eligibility](#51) | 1.3 | To do |
 | 5.2 | [Admin meta box: Card configuration](#52) | 5.1 | To do |
 | 5.3 | [Admin meta box: Filters (facets)](#53) | 5.1, 2.7 | To do |
@@ -635,6 +635,15 @@ package.json with build/start scripts.
 - npm run build produces build/directory.
 
 **Note from 1.2:** `useEntityRecords('postType', …)` requests `context=edit` by default, and that context needs `manage_options` for this CPT. Pass `context: 'view'` so editors (who place blocks but aren't admins) can list directories. The directory's `type` (needed for the Default Sort options) lives in the config meta, which is edit-context only. Editors can't read it, so expose `type` separately in the `view` context (e.g. `register_rest_field` or a small extra meta key) before building the sidebar.
+
+**Outcome:** `package.json` (`@wordpress/scripts` 30, `build`/`start`/`lint:js`/`format`, Node pinned through Volta like `wicket-wp-admin-org-roster`), `blocks/directory/index.js` + `edit.js` built into `build/directory/` (`index.js`, `index.asset.php`, a copy of `block.json`), and the hand-written `blocks/directory/index.asset.php` removed. `DirectoryBlock::register_block()` registers from `build/directory`. `DirectoryPostType` adds a read-only `directory_type` REST field, and `DirectoryBlock::enqueue_editor_data()` gives the editor the sort options. `.php-cs-fixer.dist.php` excludes `build/`. Unit tests: 5 new in `qa/tests/Unit/Directory/DirectoryBlockTest.pest.php` (the build-path test replaces the `blocks/directory` one) and `DirectoryPostTypeTest.pest.php` (8 with datasets); the suite is 240 tests, all passing. `npm run build` and `npm run lint:js` pass. Checked on the stack with `wp eval`: the block registers from `build/directory` with the built script's dependencies and the same `directory.css`, the editor data prints before the script, and `GET /wp/v2/wicket_directory?status=publish&context=view` returns `directory_type` for a visitor and an admin (`edit` stays admin-only). Checked by hand in the block editor on the stack (directory 1818): the sidebar, the Default Sort options for an Individual directory, preview updates for Results, the hide toggles and the sort, Collapse disabled while Hide Filters is on, the placeholder on a new block, the unpublished warning with the "Unavailable directory" option after switching the directory to Draft, and no console errors. Notes for later tickets:
+- **`directory_type` REST field.** `view` and `edit` contexts, read-only, `individual|organization` (`DirectoryConfig::from_post()`, so a directory with no config gives the default type). Published directory titles were already readable by anyone in `view`; the type is the only config value added. The sidebar requests `status: 'publish', per_page: -1, orderby: 'title', context: 'view', _fields: id,title,directory_type`.
+- **Sort options** come from `DirectoryType::sort_options()` through `window.wicketDirectoryEditor.sortOptions` (`{type: [{value, label}]}`, default first), printed `before` the `wicket-directory-editor-script` handle on `enqueue_block_editor_assets`. Nothing about sort tokens is duplicated in JS. Default Sort Order is shown only once the selected directory's type is known. Picking another directory resets `defaultSort` to `''` (the type's default); an unknown or other-type token shows the default, as `BlockAttributes::sort()` renders it.
+- **Number of Results** is a `RangeControl` (slider + number field, 1–50, clamped in JS too), not `NumberControl`: `__experimentalNumberControl` is still experimental and `@wordpress/no-unsafe-wp-apis` rejects it.
+- **Unpublished selection.** When the saved `directoryId` isn't in the published list, the select keeps it as a disabled "Unavailable directory (ID n)" option and a warning `Notice` sits above it; the canvas preview shows the renderer's own notice. A failed list request shows an error `Notice` instead, not the warning.
+- **Canvas.** `directoryId` 0 → `Placeholder` with the same directory select (or a "no published directories" message). Otherwise `ServerSideRender` inside `<Disabled>`, so links, the form and pagination in the preview can't navigate the editor. `Collapse Refine Results…` is disabled while `Hide Filters` is on.
+- **Translations.** `block.json` has `textdomain` and the script depends on `wp-i18n`, so WordPress calls `wp_set_script_translations()` for the editor script itself. JS strings need a `wicket-directory-{locale}-{md5}.json` from `wp i18n make-json` when the plugin ships translations.
+- **Lint.** `wp-scripts lint-js` needs `typescript` installed (its `@typescript-eslint` plugin fails to load without it), so it is a devDependency.
 
 ## 5. Admin screens
 
