@@ -34,10 +34,10 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | 3.7 | [Organization card template](#37) | 3.2 | Done |
 | 3.8 | [Directory CSS (Wicket theme tokens) and JS](#38) | 3.2 | Done |
 | 4.1 | [Block editor sidebar, preview and build](#41) | 3.1, 3.2 | Done |
-| 5.1 | [Admin meta box: Directory type and eligibility](#51) | 1.3 | To do |
-| 5.2 | [Admin meta box: Card configuration](#52) | 5.1 | To do |
-| 5.3 | [Admin meta box: Filters (facets)](#53) | 5.1, 2.7 | To do |
-| 5.4 | [Admin list table columns](#54) | 1.2 | To do |
+| 5.1 | [Admin meta box: Directory type and eligibility](#51) | 1.3 | Done |
+| 5.2 | [Admin meta box: Card configuration](#52) | 5.1 | Done |
+| 5.3 | [Admin meta box: Filters (facets)](#53) | 5.1, 2.7 | Done |
+| 5.4 | [Admin list table columns](#54) | 1.2 | Done |
 | 6.1 | [Register the plugin in the QA suite and stack docs](#61) | 1.1 | To do |
 | 6.2 | [Unit tests for config, query and data classes](#62) | 6.1 | To do |
 | 6.3 | [WordPress integration tests](#63) | 6.1 | To do |
@@ -664,6 +664,16 @@ src/Admin/DirectoryMetaBoxes.php + src/Admin/views/.
 - Settings save and reload correctly.
 - Invalid input is rejected or sanitized.
 
+**Outcome:** `src/Admin/DirectoryMetaBoxes.php`, `src/Admin/MembershipTiers.php`, `src/Admin/views/directory.php` and `assets/js/admin.js`, registered from `Plugin::plugin_setup()` in the admin only. Unit tests: `qa/tests/Unit/Directory/DirectoryMetaBoxesTest.pest.php` and `MembershipTiersTest.pest.php`. Notes for later tickets:
+- **Every box posts under `wicket_directory[...]`.** The save handler (`save_post_wicket_directory`) lays each posted section listed in `DirectoryMetaBoxes::SECTIONS` over the stored config, then calls `DirectoryConfig::sanitize($merged, $previous)`. A posted section replaces the stored one **whole**, so a box must render every field of its section. 5.2 adds `card` and 5.3 adds `facets` to `SECTIONS`; until then posted `card`/`facets` are ignored. Posted `cache_version` is always ignored.
+- The save skips autosaves, revisions, a missing or invalid nonce (`_wicket_directory_nonce`, action `wicket_directory_save`), and users without `manage_options` or `edit_post`. REST and code writes don't go through it.
+- Boolean checkboxes post a hidden `0` first. Checkbox lists post nothing when empty, which the whole-section replace saves as `[]`.
+- Views are plain includes from `src/Admin/views/` (`$args`, like the frontend templates), not theme-overridable. Rows for one type carry `data-wd-type`; `assets/js/admin.js` (plain script, no build; linted by `npm run lint:js`) shows them for the selected radio and swaps `data-wd-type-changed` / `data-wd-type-unchanged` elements while the type differs from the saved one.
+- Tiers come from `MembershipTiers` (`GET memberships`, 100 per page, up to 10 pages, no cache), filtered by `attributes.type`, labelled `name_{lang}` → `name` → `name_en` → slug, inactive ones marked, sorted by label. They're listed for the **saved** type only: a type change clears them on save, so the box says to save first. Org types come from `ResourceTypes` (since 5.2; one uncached `resource_types` request also serves the card's contact types).
+- Saved tiers or org types that the MDP no longer lists, or that couldn't be loaded, still render checked as "Unknown tier (…)" / "Unknown type (…)", so a save never drops them silently. A failed tier load shows an error notice.
+- The opt-in is three text inputs (schema key, field, value). A boolean stored value shows as `true` / `false`.
+- Verified in the local stack against the staging MDP: 28 individual and 18 organization tiers, save, type-change reset and the nonce guard. The box hasn't been checked visually in a browser.
+
 <a id="52"></a>
 
 ### 5.2 — Admin meta box: Card configuration
@@ -682,6 +692,16 @@ Card toggles for the selected type (see plan "Directory config" -> card).
 - Every toggle maps to the card output.
 - Hint text matches ContactResolver behaviour.
 
+**Outcome:** a **Card** box (`render_card_box()`, view `src/Admin/views/card.php`) and `card` in `DirectoryMetaBoxes::SECTIONS`. New data sources `src/Admin/SchemaFields.php` and `src/Admin/ResourceTypes.php`. Unit tests: `qa/tests/Unit/Directory/DirectoryCardBoxTest.pest.php`, `SchemaFieldsTest.pest.php`, `ResourceTypesTest.pest.php`. Notes for later tickets:
+- `DirectoryMetaBoxes::card_fields($type)` lists the type's settings with their admin labels: boolean `toggles`, single data-field `refs` (with the field kinds each accepts) and `contacts`; `tag_chips`, `address_format` and `website_label` have their own controls. A test checks that these cover every key of `DirectoryConfig`'s card defaults, so a new card key fails until it gets a control.
+- Only the saved type's card is printed. While the type radio differs from the saved type, `admin.js` (now document-wide, so it reaches every directory box) swaps the card for a "save first" note: a type change resets the card anyway.
+- **Data-field pickers post `"schema_key.field"`.** `DirectoryConfig::sanitize()` now accepts that string wherever it takes a data-field reference (card refs, tag chips, facets), as well as `{schema_key, field}`. Neither part may contain a dot, so the split is unambiguous. 5.3's facet pickers can post the same way.
+- `SchemaFields` loads `GET json_schemas?include=json_schema_resources` once (no cache). A schema's resource type lives on its `json_schema_resources` (`people` / `organizations`), so a directory gets the schemas bound to its type plus unbound ones. Only top-level text/number fields (`text`) and lists of them (`list`) are offered, with an `enum` flag for 5.3; booleans, objects and repeaters are left out. Image pickers (profile image, logo) offer `text` fields only. Labels come from `ui:i18n` in the admin language, then English, then the schema `title`.
+- Contact type choices come from `ResourceTypes::for(ContactResolver::RELATIONSHIPS[$field])`, plus `Any`. Website has no "only primary" box, and its hint says why.
+- As in the Directory box, saved data fields and contact types the MDP no longer lists stay selected ("Unknown field (…)" in an "Unavailable" group, "Unknown type (…)"), and a failed load shows a notice.
+- Tag chips are a checkbox list in schema order, so saving re-orders them to that order.
+- Verified in the local stack against the staging MDP: both box types render, and posting the rendered form back through `wp_update_post` gives the same config with `cache_version` + 1. A unit test does the same round trip. The boxes haven't been checked visually in a browser.
+
 <a id="53"></a>
 
 ### 5.3 — Admin meta box: Filters (facets)
@@ -698,6 +718,14 @@ Facet repeater: add, remove, reorder; editable label.
 
 - Configured facets appear in Refine Results in the same order with the given labels.
 
+**Outcome:** a **Filters** box (`render_filters_box()`, view `src/Admin/views/filters.php`), `facets` in `DirectoryMetaBoxes::SECTIONS`, and a facet repeater in `assets/js/admin.js`. Unit tests: `qa/tests/Unit/Directory/DirectoryFiltersBoxTest.pest.php` (including a save → Refine Results check of order and labels, and a render → submit → save round trip over all three boxes). Notes for later tickets:
+- **Rows post `facets[i][source|schema_key|field|label]`** in DOM order. A hidden `facets` marker comes first, so removing every row still posts the section (PHP turns the `''` into an array once rows follow it) and saving clears the facets. `admin.js` renumbers the names after every add, move and remove.
+- **Choices** are `DirectoryMetaBoxes::facet_choices($type, $schemas)`, keyed by `RequestParams::facet_key()`: Organization type first (organization directories only), then every `SchemaFields` field with `enum: true`, grouped by schema. Picker options already in the list are disabled, and `DirectoryConfig::sanitize()` still drops duplicates and an org-type facet on an individual directory.
+- A new row starts with the field's readable label. The label input's placeholder is what visitors see if the label is emptied: the raw field key, or "Organization type" (the fallback in `templates/parts/filters.php`).
+- A saved facet the picker no longer offers (not an enum any more, schema gone, or a failed load) stays in the list, marked "Not available", and saves unchanged. Visitors don't see it, because `FacetOptions` gives it no choices.
+- Add, move and remove need `admin.js`; without it, existing labels can still be edited and saved. The box also says that showing keyword, location, filters and Order by is a block setting.
+- Verified: in the local stack against the staging MDP (choices: org type, `organization_member_services.coreServices`, `organization_operational_information.yearsSinceFoundedRange`; round trip unchanged; removing all clears), and `admin.js` driven in jsdom against the real rendered markup (add, duplicate blocked, move, remove all, type switch). Not checked visually in WP admin: the browser pane can't reach the local stack.
+
 <a id="54"></a>
 
 ### 5.4 — Admin list table columns
@@ -709,6 +737,11 @@ src/Admin/ListColumns.php: add Type and Status columns to All Directories. No sh
 **Acceptance criteria:**
 
 - Columns show correct values; sortable by title and date as usual.
+
+**Outcome:** `src/Admin/ListColumns.php`, registered from `Plugin::plugin_setup()` in the admin only. Unit tests: `qa/tests/Unit/Directory/ListColumnsTest.pest.php`. Notes:
+- Columns `wicket_directory_type` and `wicket_directory_status` go right after Title (at the end if a list has no title column). Type is `DirectoryType::label()` from `DirectoryConfig::from_post()`, so an unconfigured directory shows the default, Individual. Status is the registered status label; every status but `publish` adds "Not shown on the site", because only published directories render.
+- Neither new column is sortable (the type lives inside the serialized config). Title and Date stay WordPress's own.
+- Verified with `WP_Posts_List_Table` in the local stack: columns `cb, title, Type, Status, date`, sortable `title` and `date`, and correct cells for a published organization directory and a draft individual one.
 
 ## 6. QA & registration
 

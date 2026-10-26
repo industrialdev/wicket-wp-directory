@@ -430,12 +430,21 @@ final class DirectoryConfig
     /**
      * Sanitize a data-field reference. Both parts must be valid, or both are cleared.
      *
+     * A reference is `{schema_key, field}`, or the string `"schema_key.field"`
+     * that the edit screen's pickers post. Neither part may contain a dot, so
+     * the string splits unambiguously.
+     *
      * @param mixed $value Raw reference.
      *
      * @return DataFieldRef
      */
     private static function sanitize_data_field_ref(mixed $value): array
     {
+        if (is_string($value) && str_contains($value, '.')) {
+            [$schema_key, $field] = explode('.', $value, 2);
+            $value = ['schema_key' => $schema_key, 'field' => $field];
+        }
+
         if (!is_array($value)) {
             return self::empty_ref();
         }

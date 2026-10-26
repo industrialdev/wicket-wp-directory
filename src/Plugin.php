@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Wicket\Directory;
 
+use Wicket\Directory\Admin\DirectoryMetaBoxes;
+use Wicket\Directory\Admin\ListColumns;
 use Wicket\Directory\Block\DirectoryBlock;
 use Wicket\Directory\PostType\DirectoryPostType;
 
@@ -73,5 +75,10 @@ final class Plugin
 
         (new DirectoryPostType())->register();
         (new DirectoryBlock())->register();
+
+        if (is_admin()) {
+            (new DirectoryMetaBoxes())->register();
+            (new ListColumns())->register();
+        }
     }
 }

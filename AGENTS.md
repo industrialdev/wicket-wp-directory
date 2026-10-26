@@ -21,7 +21,7 @@ composer cs:fix           # Fix code style
 composer production       # Fix style → remove dev deps → optimise autoloader (run before tagging)
 npm run build             # Build the block editor script (@wordpress/scripts) into build/
 npm run start             # Watch mode for the block editor script
-npm run lint:js           # Lint blocks/ (@wordpress/eslint-plugin)
+npm run lint:js           # Lint blocks/ and assets/js/ (@wordpress/eslint-plugin)
 php -l <file>             # Quick PHP syntax check
 ```
 
@@ -48,7 +48,15 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
     DirectoryPostType            (landed) CPT `wicket_directory` (caps → manage_options, classic editor) + `_wicket_directory_config` post meta (REST `edit` context only)
                                  + read-only `directory_type` REST field (`view` context), so the block editor knows each directory's type
       → Config\DirectoryConfig   (landed) typed config: defaults(type), from_post(post), sanitize(input, ?previous), to_array(); Config\DirectoryType enum
-    DirectoryMetaBoxes           classic edit screen (block editor disabled for this CPT)
+    Admin\DirectoryMetaBoxes     (landed, admin only) classic edit screen meta boxes; posts `wicket_directory[...]`; save_post handler lays the
+                                 posted SECTIONS (`type`, `eligibility`, `card`, `facets`) over the stored config → DirectoryConfig::sanitize(…, previous)
+                                 (nonce, manage_options + edit_post); boxes: Directory (views/directory.php), Card (views/card.php; card_fields(type) lists its controls),
+                                 Filters (views/filters.php; facet_choices(type, schemas) = org type + enum data fields; a hidden `facets` marker lets "no rows" save);
+                                 data-field pickers post "schema_key.field"; assets/js/admin.js toggles type-specific elements in every box and runs the facet repeater
+      → Admin\MembershipTiers    (landed) tier choices from GET memberships, filtered by type
+      → Admin\ResourceTypes      (landed) one GET resource_types: org types and contact record types (ContactResolver::RELATIONSHIPS)
+      → Admin\SchemaFields       (landed) GET json_schemas?include=json_schema_resources: the type's text/list data fields, with an enum flag
+    Admin\ListColumns            (landed, admin only) Type and Status columns after Title on All Directories; non-published rows say "Not shown on the site"
     Block\DirectoryBlock         (landed) dynamic block `wicket/directory` registered from build/directory (built from blocks/directory); adds the `wicket` category if missing;
                                  render_callback → DirectoryRenderer; enqueue_style() puts directory.css in the <head> of a post that has the block;
                                  enqueue_editor_data() prints window.wicketDirectoryEditor.sortOptions (DirectoryType::sort_options() per type) before the editor script
