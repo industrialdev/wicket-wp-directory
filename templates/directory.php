@@ -21,6 +21,7 @@
  *     clear_url: string,
  *     html_id: string,
  *     is_preview: bool,
+ *     wicket_theme: bool,
  *     lang: string,
  *     templates: Wicket\Directory\Render\TemplateLoader,
  * } $args
@@ -38,6 +39,12 @@ $classes = [
 
 if ($args['show_filters']) {
     $classes[] = 'wicket-directory--has-filters';
+}
+
+// Without a Wicket theme nothing styles the card-listing, filter-form and
+// pagination classes, so directory.css gives them its own look.
+if (!$args['wicket_theme']) {
+    $classes[] = 'wicket-directory--standalone';
 }
 ?>
 <div id="<?php echo esc_attr($args['html_id']); ?>" class="<?php echo esc_attr(implode(' ', $classes)); ?>">

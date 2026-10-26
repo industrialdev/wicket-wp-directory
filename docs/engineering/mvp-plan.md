@@ -88,7 +88,8 @@ templates/  directory.php  parts/{search-bar,filters,results-header,pagination,n
 assets/css/directory.css  (plain CSS, BEM `.wicket-directory__*`, only Wicket theme tokens with
                            fallbacks + container queries; no Tailwind utilities — the base
                            plugin's Tailwind build only scans its own components)
-assets/js/directory.js    (tiny: mobile collapse default; Alpine comes from theme/base plugin)
+(no directory.js: Alpine x-data sets the mobile collapse default, and CSS covers the state
+                           before Alpine starts; see ticket 3.8. Alpine comes from theme/base plugin)
 ```
 
 ## Directory config (one post-meta array)
@@ -182,7 +183,7 @@ The Wicket theme exposes its design tokens as CSS custom properties on `:root`: 
   ```
 - The fallbacks keep the directory readable on non-Wicket themes.
 - The card title, eyebrow, meta and chips use `--font-size-heading-xs`, `--font-size-label-*` and `--letter-spacing-loose`. The focus ring uses `--box-shadow-focus`.
-- The plugin CSS is loaded only when the block is on the page (`block.json` `style`), and the same file is loaded in the editor.
+- The plugin CSS is loaded only when the block is on the page (`block.json` `viewStyle`, enqueued in the `<head>` when the post has the block), and the same file is loaded in the editor (`editorStyle`).
 
 ### Base components used (`wicket-wp-base-plugin/includes/components`)
 | UI piece | Component | Notes |

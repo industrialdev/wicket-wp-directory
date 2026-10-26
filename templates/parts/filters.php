@@ -14,6 +14,11 @@
  * after five options and the live selected count. Without Alpine the panel is
  * open, every option shows, and the JS-only controls stay hidden (`x-cloak`).
  *
+ * With `collapseRefineOnMobile`, the panel is printed collapsed, so a phone
+ * doesn't show it open until Alpine starts. Alpine's `:class` then owns the
+ * class. `directory.css` opens it again when the browser runs no scripts. The
+ * editor preview runs no Alpine, so there it's printed open.
+ *
  * Override it at `{theme}/wicket-directory/parts/filters.php`.
  *
  * @var array{
@@ -23,6 +28,7 @@
  *     facet_options: array<string, list<array{value: string, label: string}>>,
  *     clear_url: string,
  *     html_id: string,
+ *     is_preview: bool,
  * } $args Plus the rest of `directory.php`'s args.
  */
 
@@ -72,11 +78,17 @@ if ($facets === []) {
 
 // The theme's `lg` breakpoint: below it the panel collapses. The whole top bar
 // toggles it; its button gives keyboard focus and state, and clicks bubble up.
-$show_filters = $args['attributes']->collapse_refine_on_mobile
+$collapse = $args['attributes']->collapse_refine_on_mobile;
+$show_filters = $collapse
     ? "!window.matchMedia('(max-width: 1023.98px)').matches"
     : 'true';
+$panel_classes = ['wicket-directory__filters', 'component-filter-form'];
+
+if ($collapse && !$args['is_preview']) {
+    $panel_classes[] = 'wicket-directory__filters--collapsed';
+}
 ?>
-<div id="<?php echo esc_attr($panel_id); ?>" class="wicket-directory__filters component-filter-form"
+<div id="<?php echo esc_attr($panel_id); ?>" class="<?php echo esc_attr(implode(' ', $panel_classes)); ?>"
 	x-data="{ showFilters: <?php echo esc_attr($show_filters); ?> }"
 	:class="{ 'wicket-directory__filters--collapsed': !showFilters }">
 	<div class="component-filter-form__top wicket-directory__filters-top" :class="showFilters ? 'open' : 'closed'" @click="showFilters = !showFilters">

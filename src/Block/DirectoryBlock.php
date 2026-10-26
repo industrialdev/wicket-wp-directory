@@ -12,6 +12,10 @@ use Wicket\Directory\Render\DirectoryRenderer;
  * block.json holds the attributes and assets. The render callback serves both
  * the frontend and the editor preview (ServerSideRender), so there is one
  * render path.
+ *
+ * directory.css is the block's `viewStyle` and `editorStyle`, not its `style`:
+ * classic themes load every block's `style` on every page, but a view style
+ * only loads when the block renders. See enqueue_style() for the frontend.
  */
 final class DirectoryBlock
 {
@@ -47,6 +51,7 @@ final class DirectoryBlock
     public function register(): void
     {
         add_action('init', [$this, 'register_block']);
+        add_action('wp_enqueue_scripts', [$this, 'enqueue_style']);
         add_filter('block_categories_all', [$this, 'add_category']);
     }
 
@@ -60,6 +65,23 @@ final class DirectoryBlock
         register_block_type(dirname(__DIR__, 2) . '/blocks/directory', [
             'render_callback' => [$this, 'render'],
         ]);
+    }
+
+    /**
+     * Load directory.css in the `<head>` of a post whose content has the block.
+     *
+     * WordPress enqueues a view style when the block renders, which on a
+     * classic theme is after `wp_head`, so the stylesheet would print in the
+     * footer and the directory would show unstyled first. Elsewhere (a widget,
+     * a synced pattern, a template) that footer load still applies.
+     *
+     * @return void
+     */
+    public function enqueue_style(): void
+    {
+        if (is_singular() && has_block(self::NAME, get_queried_object_id())) {
+            wp_enqueue_style(generate_block_asset_handle(self::NAME, 'viewStyle'));
+        }
     }
 
     /**

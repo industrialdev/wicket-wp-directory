@@ -46,5 +46,6 @@
     "html": false
   },
   "editorScript": "file:./index.js",
-  "style": "file:../../assets/css/directory.css"
+  "viewStyle": "file:../../assets/css/directory.css",
+  "editorStyle": "file:../../assets/css/directory.css"
 }

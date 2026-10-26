@@ -47,7 +47,8 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
     DirectoryPostType            (landed) CPT `wicket_directory` (caps → manage_options, classic editor) + `_wicket_directory_config` post meta (REST `edit` context only)
       → Config\DirectoryConfig   (landed) typed config: defaults(type), from_post(post), sanitize(input, ?previous), to_array(); Config\DirectoryType enum
     DirectoryMetaBoxes           classic edit screen (block editor disabled for this CPT)
-    Block\DirectoryBlock         (landed) dynamic block `wicket/directory` from blocks/directory/block.json; adds the `wicket` category if missing; render_callback → DirectoryRenderer
+    Block\DirectoryBlock         (landed) dynamic block `wicket/directory` from blocks/directory/block.json; adds the `wicket` category if missing; render_callback → DirectoryRenderer;
+                                 enqueue_style() puts directory.css in the <head> of a post that has the block
       → Block\BlockAttributes    (landed) from_array(attributes): sanitized, resultsPerPage clamped 1–50; sort(DirectoryType) resolves defaultSort
 ```
 
@@ -76,7 +77,8 @@ Block render_callback / ServerSideRender
           parts/no-results (landed): no-results message, or the alert component for an `unavailable` page
           cards/card-individual (landed): component-card-listing classes; details / address / contact columns; tag, button, link + icon components
           cards/card-organization (landed): same structure; org type under the name, logo, description with Show more / Show less (Alpine) past 40 words
-          assets/css/directory.css (started: search row, Refine Results panel, results header, card layout + container query, logo, description toggle)
+          assets/css/directory.css (landed) block viewStyle + editorStyle; one --wd-* token layer on .wicket-directory (theme tokens + fallbacks);
+            sidebar layout via @container; --standalone modifier (no Wicket theme) styles the panel, cards and pagination itself
 ```
 
 There is **one render path**. The frontend and the block editor preview both go through `DirectoryRenderer`. Don't add a second one.
@@ -102,9 +104,10 @@ There is **one render path**. The frontend and the block editor preview both go 
   - `wicket_get_resource_type_name_by_slug()`: refetches everything on every call
   - `wicket_get_*_connections_by_id()`: its static cache ignores the ID
 - **Styling:**
-  - Use only Wicket theme CSS variables (`--color-*`, `--spacing-*`, `--border-radius-*`, `--box-shadow-*`, `--font-size-*`), each with a fallback value. Map them onto the `--wd-*` layer on `.wicket-directory`.
-  - No hard-coded colours or sizes, and no Tailwind utilities in our own markup.
+  - Use only Wicket theme CSS variables (`--color-*`, `--spacing-*`, `--border-radius-*`, `--box-shadow-*`, `--font-size-*`, `--layout-*`), each with a fallback value. Map them onto the `--wd-*` layer (the first `.wicket-directory {}` rule); every other rule uses only `--wd-*`.
+  - No hard-coded colours or sizes outside that layer, and no Tailwind utilities in our own markup. `qa`'s `DirectoryCssTest` enforces both.
   - Use container queries for card layout.
+  - Styles only non-Wicket themes need go under `.wicket-directory--standalone`, so they never fight the Wicket theme's own.
 - **Escape everything.** Base `button`, `link` and `icon` don't escape their args, so pass `esc_url()` / `esc_html()` values in.
 - **Filtering happens in the API query** (Ransack filters on `people/query` / `organizations/query`). Never fetch everything and filter in PHP. Facet options come from schema/resource-type enums, not from the result set.
 - **Contact info** (address, email, phone, website) always goes through `ContactResolver` (type → show-in-directory / primary truth table). Don't pick records ad hoc in templates.

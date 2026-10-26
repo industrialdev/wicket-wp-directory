@@ -188,6 +188,7 @@ final class DirectoryRenderer
             'clear_url'     => $is_preview ? '#' : self::clear_url($_GET, $prefix),
             'html_id'       => 'wicket-directory-' . $directory->ID,
             'is_preview'    => $is_preview,
+            'wicket_theme'  => function_exists('is_wicket_theme_active') && is_wicket_theme_active(),
             'lang'          => $lang,
             'templates'     => $this->templates,
         ]);

@@ -1,24 +1,56 @@
 /**
  * Wicket Directory block styles.
  *
- * Sizes come from Wicket theme tokens, each with a fallback for other themes,
- * through the --wd-* layer on .wicket-directory.
+ * Every colour and size comes from the --wd-* layer on .wicket-directory. The
+ * layer maps the Wicket theme's tokens, each with a fallback for other themes,
+ * so a child theme retunes the directory by setting a theme token (the whole
+ * site) or a --wd-* property (the directory only). Rules outside the layer
+ * use only --wd-* properties.
+ *
+ * With a Wicket theme, its card-listing, filter-form and pagination styles do
+ * the look and these rules do the layout. Elsewhere the directory has the
+ * `--standalone` modifier, and the rules at the end give it its own look.
  */
 
 .wicket-directory {
-	--wd-search-gap: var(--spacing-100, 0.5rem);
-	--wd-search-icon-inset: var(--spacing-200, 1rem);
-	--wd-search-icon-space: var(--spacing-500, 2.5rem);
-	--wd-filters-gap: var(--spacing-100, 0.5rem);
-	--wd-filters-option-gap: var(--spacing-150, 0.75rem);
-	--wd-results-gap: var(--spacing-200, 1rem);
-	--wd-sort-gap: var(--spacing-150, 0.75rem);
-	--wd-list-gap: var(--spacing-200, 1rem);
-	--wd-card-gap: var(--spacing-200, 1rem);
-	--wd-card-row-gap: var(--spacing-100, 0.5rem);
-	--wd-card-image-size: var(--spacing-1000, 5rem);
-	--wd-card-text-muted: var(--color-text-content-secondary, #5b6670);
-	--wd-card-label-size: var(--font-size-label-md, 0.875rem);
+	/* Colours */
+	--wd-text: var(--color-text-content, #232a31);
+	--wd-text-muted: var(--color-text-content-secondary, #5b6670);
+	--wd-accent: var(--color-text-accent, #0a5c8a);
+	--wd-interactive: var(--color-interactive, #0a5c8a);
+	--wd-interactive-bg: var(--color-bg-interactive, #0a5c8a);
+	--wd-interactive-text: var(--color-text-button-label-reversed, #fff);
+	--wd-card-bg: var(--color-bg-card, #fff);
+	--wd-card-border: var(--color-border-card, #dfe3e7);
+	--wd-panel-bg: var(--color-bg-light, #f5f7f9);
+	--wd-divider: var(--color-border-light, #dfe3e7);
+
+	/* Shape */
+	--wd-border-width: 1px;
+	--wd-radius: var(--border-radius-150, 0.75rem);
+	--wd-radius-sm: var(--border-radius-050, 0.25rem);
+	--wd-shadow: var(--box-shadow-4, 0 4px 8px rgb(35 42 49 / 20%));
+	--wd-focus-ring: var(--box-shadow-focus, 0 0 1px 2px #0997ff);
+	/* Drawn in forced-colours mode, where the ring's shadow isn't. */
+	--wd-focus-outline: 2px solid transparent;
+
+	/* Spacing */
+	--wd-space-xs: var(--spacing-50, 0.25rem);
+	--wd-space-sm: var(--spacing-100, 0.5rem);
+	--wd-space-md: var(--spacing-150, 0.75rem);
+	--wd-space-lg: var(--spacing-200, 1rem);
+	--wd-space-xl: var(--spacing-400, 2rem);
+	--wd-icon-space: var(--spacing-500, 2.5rem);
+	--wd-image-size: var(--spacing-1000, 5rem);
+	--wd-sidebar: var(--layout-sidebar, 322px);
+
+	/* Type */
+	--wd-font-size-title: var(--font-size-heading-xs, 1.25rem);
+	--wd-font-size-label: var(--font-size-label-md, 0.875rem);
+	--wd-letter-spacing: var(--letter-spacing-loose, 0.05em);
+
+	/* The sidebar layout follows the directory's width, not the viewport's. */
+	container: wd-directory / inline-size;
 }
 
 /* Alpine-only controls stay hidden until Alpine runs (the Wicket theme has this rule; others may not). */
@@ -26,12 +58,66 @@
 	display: none !important;
 }
 
+/* Bare buttons: no theme button chrome. */
+.wicket-directory :is(
+	.wicket-directory__filters-toggle,
+	.wicket-directory__facet-toggle,
+	.wicket-directory__see-more,
+	.wicket-directory-card__description-toggle
+) {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+}
+
+.wicket-directory :is(
+	.wicket-directory__filters-toggle,
+	.wicket-directory__facet-toggle,
+	.wicket-directory__see-more,
+	.wicket-directory-card__description-toggle,
+	.wicket-directory__checkbox
+):focus-visible {
+	outline: var(--wd-focus-outline);
+	box-shadow: var(--wd-focus-ring);
+}
+
+/* Layout: search row, then [Refine Results] [results] side by side when there's room. */
+
+.wicket-directory__form,
+.wicket-directory__body {
+	display: grid;
+	gap: var(--wd-space-lg);
+}
+
+.wicket-directory__body {
+	gap: var(--wd-space-xl);
+}
+
+/*
+ * Below the theme's lg breakpoint the panel collapses, so it stays above the
+ * results; this width needs at least that viewport.
+ */
+@container wd-directory (min-width: 64rem) {
+	.wicket-directory--has-filters .wicket-directory__body {
+		grid-template-columns: var(--wd-sidebar) minmax(0, 1fr);
+		align-items: start;
+	}
+}
+
+.wicket-directory__results {
+	min-width: 0;
+}
+
 /* Search row: [keyword] [location] [Search] */
 
 .wicket-directory__search {
 	display: flex;
 	flex-wrap: wrap;
-	gap: var(--wd-search-gap);
+	gap: var(--wd-space-sm);
 }
 
 /*
@@ -65,7 +151,7 @@
 .wicket-directory__location .wicket-directory__location-icon {
 	position: absolute;
 	inset-block: 0;
-	inset-inline-start: var(--wd-search-icon-inset);
+	inset-inline-start: var(--wd-space-lg);
 	display: flex;
 	align-items: center;
 	pointer-events: none;
@@ -74,10 +160,10 @@
 .wicket-directory__location .wicket-directory__location-input {
 	width: 100%;
 	height: 100%;
-	padding-inline-start: var(--wd-search-icon-space);
+	padding-inline-start: var(--wd-icon-space);
 }
 
-/* Refine Results panel. The theme's filter-form styles do the look; these do the layout. */
+/* Refine Results panel. */
 
 .wicket-directory__filters-top,
 .wicket-directory__filters-title,
@@ -85,24 +171,11 @@
 .wicket-directory__facet-status {
 	display: flex;
 	align-items: center;
-	gap: var(--wd-filters-gap);
+	gap: var(--wd-space-sm);
 }
 
 .wicket-directory__filters-top {
 	justify-content: space-between;
-}
-
-/* Bare buttons: no theme button chrome. */
-.wicket-directory .wicket-directory__filters-toggle,
-.wicket-directory .wicket-directory__facet-toggle,
-.wicket-directory .wicket-directory__see-more {
-	margin: 0;
-	padding: 0;
-	border: 0;
-	background: none;
-	color: inherit;
-	font: inherit;
-	cursor: pointer;
 }
 
 .wicket-directory .wicket-directory__facet-toggle {
@@ -119,7 +192,7 @@
 }
 
 .wicket-directory__options {
-	margin: var(--wd-filters-option-gap) 0 0;
+	margin: var(--wd-space-md) 0 0;
 	padding: 0;
 	list-style: none;
 }
@@ -127,8 +200,8 @@
 .wicket-directory__option {
 	display: flex;
 	align-items: center;
-	gap: var(--wd-filters-gap);
-	margin: 0 0 var(--wd-filters-option-gap);
+	gap: var(--wd-space-sm);
+	margin: 0 0 var(--wd-space-md);
 }
 
 .wicket-directory__option .wicket-directory__checkbox,
@@ -140,7 +213,11 @@
 	font-weight: normal;
 }
 
-/* Mobile and tablet (below the theme's lg breakpoint) collapse; desktop always shows the panel. */
+/*
+ * Mobile and tablet (below the theme's lg breakpoint) collapse; desktop always
+ * shows the panel. A panel printed collapsed (collapseRefineOnMobile) starts
+ * that way before Alpine runs.
+ */
 @media (max-width: 1023.98px) {
 	.wicket-directory__filters-top {
 		cursor: pointer;
@@ -157,6 +234,13 @@
 	}
 }
 
+/* No scripts: nothing could open a panel printed collapsed, so show it. */
+@media (scripting: none) {
+	.wicket-directory__filters--collapsed .wicket-directory__filters-group {
+		display: revert;
+	}
+}
+
 /* Results header: [Displaying X–Y of N results] … [Order by ▾] */
 
 .wicket-directory__results-header {
@@ -164,8 +248,8 @@
 	flex-wrap: wrap;
 	align-items: center;
 	justify-content: space-between;
-	gap: var(--wd-results-gap);
-	margin-block-end: var(--wd-results-gap);
+	gap: var(--wd-space-lg);
+	margin-block-end: var(--wd-space-lg);
 }
 
 .wicket-directory__count {
@@ -177,7 +261,7 @@
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
-	gap: var(--wd-sort-gap);
+	gap: var(--wd-space-md);
 }
 
 .wicket-directory__sort .wicket-directory__sort-label {
@@ -187,18 +271,18 @@
 .wicket-directory__pagination,
 .wicket-directory__no-results,
 .wicket-directory__unavailable {
-	margin-block-start: var(--wd-results-gap);
+	margin-block-start: var(--wd-space-lg);
 }
 
 .wicket-directory__no-results-title {
 	font-weight: bold;
 }
 
-/* Cards. The theme's component-card-listing styles do the look; these do the layout. */
+/* Cards. */
 
 .wicket-directory__list {
 	display: grid;
-	gap: var(--wd-list-gap);
+	gap: var(--wd-space-lg);
 	margin: 0;
 	padding: 0;
 	list-style: none;
@@ -213,7 +297,7 @@
 .wicket-directory .wicket-directory-card {
 	display: flex;
 	flex-direction: column;
-	gap: var(--wd-card-gap);
+	gap: var(--wd-space-lg);
 }
 
 .wicket-directory-card__content {
@@ -222,7 +306,7 @@
 }
 
 .wicket-directory-card__content > * {
-	margin-block: 0 var(--wd-card-gap);
+	margin-block: 0 var(--wd-space-lg);
 }
 
 .wicket-directory-card__content > :last-child {
@@ -235,8 +319,8 @@
 
 .wicket-directory-card__image {
 	display: block;
-	width: var(--wd-card-image-size);
-	height: var(--wd-card-image-size);
+	width: var(--wd-image-size);
+	height: var(--wd-image-size);
 	border-radius: 50%;
 	object-fit: cover;
 }
@@ -244,7 +328,7 @@
 /* Logos keep their shape: up to twice as wide as a photo, never cropped. */
 .wicket-directory-card__image--logo {
 	width: auto;
-	max-width: calc(var(--wd-card-image-size) * 2);
+	max-width: calc(var(--wd-image-size) * 2);
 	border-radius: 0;
 	object-fit: contain;
 }
@@ -255,30 +339,23 @@
 
 .wicket-directory .wicket-directory-card__job-title,
 .wicket-directory .wicket-directory-card__org-type {
-	margin-block-start: calc(var(--wd-card-gap) * -0.5);
-	color: var(--wd-card-text-muted);
+	margin-block-start: calc(var(--wd-space-lg) * -0.5);
+	color: var(--wd-text-muted);
 }
 
 .wicket-directory-card__description p {
 	margin: 0;
 }
 
-/* A bare, link-styled button: no theme button chrome. */
 .wicket-directory .wicket-directory-card__description-toggle {
-	margin: var(--wd-card-row-gap) 0 0;
-	padding: 0;
-	border: 0;
-	background: none;
-	color: inherit;
-	font: inherit;
+	margin-block-start: var(--wd-space-sm);
 	text-decoration: underline;
-	cursor: pointer;
 }
 
 .wicket-directory-card__columns {
 	display: flex;
 	flex-direction: column;
-	gap: var(--wd-card-gap);
+	gap: var(--wd-space-lg);
 }
 
 .wicket-directory-card__column {
@@ -293,11 +370,11 @@
 .wicket-directory-card__detail + .wicket-directory-card__detail,
 .wicket-directory-card__address + .wicket-directory-card__address,
 .wicket-directory-card__contact + .wicket-directory-card__contact {
-	margin-block-start: var(--wd-card-row-gap);
+	margin-block-start: var(--wd-space-sm);
 }
 
 .wicket-directory-card__details dt {
-	font-size: var(--wd-card-label-size);
+	font-size: var(--wd-font-size-label);
 	font-weight: bold;
 }
 
@@ -308,7 +385,7 @@
 .wicket-directory-card__address {
 	display: flex;
 	align-items: baseline;
-	gap: var(--wd-card-row-gap);
+	gap: var(--wd-space-sm);
 }
 
 .wicket-directory-card__address address {
@@ -318,14 +395,14 @@
 .wicket-directory-card__phone {
 	display: inline-flex;
 	align-items: center;
-	gap: var(--wd-card-row-gap);
+	gap: var(--wd-space-sm);
 }
 
 .wicket-directory-card__actions,
 .wicket-directory-card__tags {
 	display: flex;
 	flex-wrap: wrap;
-	gap: var(--wd-card-row-gap);
+	gap: var(--wd-space-sm);
 }
 
 @container wd-card (min-width: 36rem) {
@@ -337,4 +414,87 @@
 	.wicket-directory-card__columns {
 		flex-direction: row;
 	}
+}
+
+/*
+ * Standalone: no Wicket theme. Nothing else styles the card-listing,
+ * filter-form and pagination classes there. A panel or card sets its own text
+ * and link colours along with its background, so it stays readable on a dark
+ * theme. Page links sit on the page, so they keep the theme's text colour.
+ */
+
+.wicket-directory--standalone .wicket-directory__filters {
+	padding: var(--wd-space-lg);
+	border-radius: var(--wd-radius);
+	background: var(--wd-panel-bg);
+	color: var(--wd-text);
+}
+
+.wicket-directory--standalone .component-filter-form__heading,
+.wicket-directory--standalone .component-filter-form__filter-section-label {
+	font-weight: bold;
+}
+
+.wicket-directory--standalone .wicket-directory__filters-group {
+	margin-block-start: var(--wd-space-lg);
+}
+
+.wicket-directory--standalone .wicket-directory__facet {
+	padding-block: var(--wd-space-md);
+	border-block-start: var(--wd-border-width) solid var(--wd-divider);
+}
+
+.wicket-directory--standalone .wicket-directory__filters-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--wd-space-sm);
+	padding-block-start: var(--wd-space-lg);
+	border-block-start: var(--wd-border-width) solid var(--wd-divider);
+}
+
+.wicket-directory--standalone .wicket-directory-card {
+	padding: var(--wd-space-lg);
+	border: var(--wd-border-width) solid var(--wd-card-border);
+	border-radius: var(--wd-radius);
+	background: var(--wd-card-bg);
+	color: var(--wd-text);
+	box-shadow: var(--wd-shadow);
+}
+
+.wicket-directory--standalone :is(.wicket-directory__filters, .wicket-directory-card) a:not(.component-button) {
+	color: var(--wd-interactive);
+}
+
+.wicket-directory--standalone .wicket-directory-card__eyebrow {
+	color: var(--wd-accent);
+	font-size: var(--wd-font-size-label);
+	letter-spacing: var(--wd-letter-spacing);
+}
+
+.wicket-directory--standalone .wicket-directory-card__title {
+	font-size: var(--wd-font-size-title);
+}
+
+.wicket-directory--standalone .wicket-pagination {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: var(--wd-space-xs);
+}
+
+.wicket-directory--standalone .wicket-pagination .page-numbers {
+	padding: var(--wd-space-sm) var(--wd-space-md);
+	border-radius: var(--wd-radius-sm);
+	color: inherit;
+	font-weight: bold;
+	text-decoration: none;
+}
+
+.wicket-directory--standalone .wicket-pagination a.page-numbers:is(:hover, :focus-visible) {
+	text-decoration: underline;
+}
+
+.wicket-directory--standalone .wicket-pagination .page-numbers.current {
+	background: var(--wd-interactive-bg);
+	color: var(--wd-interactive-text);
 }
