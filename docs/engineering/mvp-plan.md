@@ -162,27 +162,32 @@ Rules for all templates:
 
 ## Theme & component compatibility
 
-### CSS variables (Wicket theme `assets/styles/variables/_theme-json.scss`)
-The Wicket theme exposes its design tokens as CSS custom properties on `:root`: `--color-*` (text, interactive, state, bg, border), `--spacing-25…1000`, `--border-radius-*`, `--box-shadow-4|8|12|focus`, `--font-size-heading-*|body-*|label-*|button-label-*`, `--line-height-*`, `--letter-spacing-*`, `--layout-*`. Client themes set the underlying values.
+### CSS variables (what the Wicket theme prints on `:root`)
+The Wicket theme prints its design tokens as CSS custom properties on `:root` from three sources:
+- **Theme Styling options** (ACF group `group_66f2d49c4ce0d`, printed by `custom/styling-scripts.php`): `--text-*` and `--interactive` (text), `--bg-*`, `--border-*` (colours and widths), `--space-0…1000` (zero-padded: `--space-050`), `--*-corner-radius`, `--elevation-4|8|12`. Each client sets these in WP Admin.
+- **Typography** (in `wicket.min.css`): `--heading-{3xl…xs}-font-size`, `--body-{lg|md|sm}-font-size`, `--label-{lg|md|sm}-font-size`, and the matching `-line-height` / `-font-weight` / `-font-family`.
+- **theme.json custom values** (WordPress global styles): `--wp--custom--layout--sidebar`, `--wp--custom--letter-spacing--*`, `--wp--custom--box-shadow--focus`, `--wp--custom--border-radius--*`.
+
+The `--color-*`, `--spacing-*`, `--border-radius-*` and `--font-size-*` aliases in the theme's `assets/styles/variables/_theme-json.scss` are **not** available: nothing imports that file, so they never reach a site.
 
 - `directory.css` uses **only these tokens**, no hard-coded colours or sizes. It maps them once onto a small plugin-scoped layer, so a client theme can retune the directory without touching the rest of the site:
   ```css
   .wicket-directory {
-    --wd-text:        var(--color-text-content, #232a31);
-    --wd-text-muted:  var(--color-text-content-secondary, #5b6670);
-    --wd-accent:      var(--color-text-accent, #0a5c8a);
-    --wd-card-bg:     var(--color-bg-card, #fff);
-    --wd-card-border: var(--color-border-card, #dfe3e7);
-    --wd-panel-bg:    var(--color-bg-light, #f5f7f9);
-    --wd-radius:      var(--border-radius-150, .75rem);
-    --wd-shadow:      var(--box-shadow-4, 0 4px 8px rgba(35,42,49,.2));
-    --wd-gap:         var(--spacing-200, 1rem);
-    --wd-sidebar:     var(--layout-sidebar, 322px);
+    --wd-text:        var(--text-content, #232a31);
+    --wd-text-muted:  var(--text-content-secondary, #5b6670);
+    --wd-accent:      var(--text-accent, #0a5c8a);
+    --wd-card-bg:     var(--bg-card, #fff);
+    --wd-card-border: var(--border-card, #dfe3e7);
+    --wd-panel-bg:    var(--bg-light, #f5f7f9);
+    --wd-radius:      var(--card-corner-radius, .75rem);
+    --wd-shadow:      var(--elevation-4, 0 4px 8px rgba(35,42,49,.2));
+    --wd-gap:         var(--space-200, 1rem);
+    --wd-sidebar:     var(--wp--custom--layout--sidebar, 322px);
     /* …heading/body font sizes, state colours for the "unavailable" alert, focus ring */
   }
   ```
 - The fallbacks keep the directory readable on non-Wicket themes.
-- The card title, eyebrow, meta and chips use `--font-size-heading-xs`, `--font-size-label-*` and `--letter-spacing-loose`. The focus ring uses `--box-shadow-focus`.
+- The card title, eyebrow, meta and chips use `--heading-xs-font-size`, `--label-*-font-size` and `--wp--custom--letter-spacing--loose`. The focus ring uses `--wp--custom--box-shadow--focus`.
 - The plugin CSS is loaded only when the block is on the page (`block.json` `viewStyle`, enqueued in the `<head>` when the post has the block), and the same file is loaded in the editor (`editorStyle`).
 
 ### Base components used (`wicket-wp-base-plugin/includes/components`)
@@ -277,7 +282,7 @@ The directory name is the post title. Publish and Save Draft are WordPress's own
   3. Switch the directory to Draft and check that the page renders nothing and the editor shows a notice.
 - **Theme compatibility (manual):**
   1. Render the block on the Wicket theme (v2) and check that cards, filters, search, pagination and chips pick up the theme's colours, spacing, radius and type.
-  2. Override a few `--color-*` / `--spacing-*` values in a child theme and confirm the directory follows.
+  2. Change a few colours and spacing values in Theme Styling (or override `--text-*` / `--space-*` in a child theme) and confirm the directory follows.
   3. Render on a default WordPress theme (Twenty Twenty-Five) and confirm the fallbacks give a readable layout.
   4. Check the search row order ([keyword] [location] [Search]) with each Hide combination. Check that the keyword value pre-fills after a search and that the Refine panel matches the look of the theme's listing-block filters.
 - **Code style:** `composer cs:lint` in the plugin, and `wicket test` for the suite.

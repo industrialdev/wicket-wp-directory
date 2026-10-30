@@ -7,6 +7,11 @@
  * site) or a --wd-* property (the directory only). Rules outside the layer
  * use only --wd-* properties.
  *
+ * The theme tokens are the names the Wicket theme prints at runtime: its
+ * Theme Styling options (--text-*, --bg-*, --border-*, --space-*, corner
+ * radii, --elevation-*), its typography set (--{style}-font-size) and its
+ * theme.json custom values (--wp--custom--*).
+ *
  * With a Wicket theme, its card-listing, filter-form and pagination styles do
  * the look and these rules do the layout. Elsewhere the directory has the
  * `--standalone` modifier, and the rules at the end give it its own look.
@@ -14,40 +19,40 @@
 
 .wicket-directory {
 	/* Colours */
-	--wd-text: var(--color-text-content, #232a31);
-	--wd-text-muted: var(--color-text-content-secondary, #5b6670);
-	--wd-accent: var(--color-text-accent, #0a5c8a);
-	--wd-interactive: var(--color-interactive, #0a5c8a);
-	--wd-interactive-bg: var(--color-bg-interactive, #0a5c8a);
-	--wd-interactive-text: var(--color-text-button-label-reversed, #fff);
-	--wd-card-bg: var(--color-bg-card, #fff);
-	--wd-card-border: var(--color-border-card, #dfe3e7);
-	--wd-panel-bg: var(--color-bg-light, #f5f7f9);
-	--wd-divider: var(--color-border-light, #dfe3e7);
+	--wd-text: var(--text-content, #232a31);
+	--wd-text-muted: var(--text-content-secondary, #5b6670);
+	--wd-accent: var(--text-accent, #0a5c8a);
+	--wd-interactive: var(--interactive, #0a5c8a);
+	--wd-interactive-bg: var(--bg-interactive, #0a5c8a);
+	--wd-interactive-text: var(--text-button-label-reversed, #fff);
+	--wd-card-bg: var(--bg-card, #fff);
+	--wd-card-border: var(--border-card, #dfe3e7);
+	--wd-panel-bg: var(--bg-light, #f5f7f9);
+	--wd-divider: var(--border-light, #dfe3e7);
 
 	/* Shape */
 	--wd-border-width: 1px;
-	--wd-radius: var(--border-radius-150, 0.75rem);
-	--wd-radius-sm: var(--border-radius-050, 0.25rem);
-	--wd-shadow: var(--box-shadow-4, 0 4px 8px rgb(35 42 49 / 20%));
-	--wd-focus-ring: var(--box-shadow-focus, 0 0 1px 2px #0997ff);
+	--wd-radius: var(--card-corner-radius, 0.75rem);
+	--wd-radius-sm: var(--image-corner-radius, 0.25rem);
+	--wd-shadow: var(--elevation-4, 0 4px 8px rgb(35 42 49 / 20%));
+	--wd-focus-ring: var(--wp--custom--box-shadow--focus, 0 0 1px 2px #0997ff);
 	/* Drawn in forced-colours mode, where the ring's shadow isn't. */
 	--wd-focus-outline: 2px solid transparent;
 
 	/* Spacing */
-	--wd-space-xs: var(--spacing-50, 0.25rem);
-	--wd-space-sm: var(--spacing-100, 0.5rem);
-	--wd-space-md: var(--spacing-150, 0.75rem);
-	--wd-space-lg: var(--spacing-200, 1rem);
-	--wd-space-xl: var(--spacing-400, 2rem);
-	--wd-icon-space: var(--spacing-500, 2.5rem);
-	--wd-image-size: var(--spacing-1000, 5rem);
-	--wd-sidebar: var(--layout-sidebar, 322px);
+	--wd-space-xs: var(--space-050, 0.25rem);
+	--wd-space-sm: var(--space-100, 0.5rem);
+	--wd-space-md: var(--space-150, 0.75rem);
+	--wd-space-lg: var(--space-200, 1rem);
+	--wd-space-xl: var(--space-400, 2rem);
+	--wd-icon-space: var(--space-500, 2.5rem);
+	--wd-image-size: var(--space-1000, 5rem);
+	--wd-sidebar: var(--wp--custom--layout--sidebar, 322px);
 
 	/* Type */
-	--wd-font-size-title: var(--font-size-heading-xs, 1.25rem);
-	--wd-font-size-label: var(--font-size-label-md, 0.875rem);
-	--wd-letter-spacing: var(--letter-spacing-loose, 0.05em);
+	--wd-font-size-title: var(--heading-xs-font-size, 1.25rem);
+	--wd-font-size-label: var(--label-sm-font-size, 0.875rem);
+	--wd-letter-spacing: var(--wp--custom--letter-spacing--loose, 0.05em);
 
 	/* The sidebar layout follows the directory's width, not the viewport's. */
 	container: wd-directory / inline-size;
@@ -268,6 +273,11 @@
 	margin: 0;
 }
 
+/* Room for the select's arrow, so a long option label doesn't run under it. */
+.wicket-directory__sort-select {
+	padding-inline-end: var(--wd-icon-space) !important;
+}
+
 .wicket-directory__pagination,
 .wicket-directory__no-results,
 .wicket-directory__unavailable {
@@ -329,18 +339,47 @@
 .wicket-directory-card__image--logo {
 	width: auto;
 	max-width: calc(var(--wd-image-size) * 2);
-	border-radius: 0;
+	border-radius: var(--wd-radius-sm);
 	object-fit: contain;
+}
+
+/* Header: eyebrow, name and meta line, with a divider under it when more follows. */
+.wicket-directory-card__header:not(:last-child) {
+	padding-block-end: var(--wd-space-lg);
+	border-block-end: var(--wd-border-width) solid var(--wd-divider);
+}
+
+.wicket-directory .wicket-directory-card__header > * {
+	margin-block: 0;
+}
+
+.wicket-directory .wicket-directory-card__header > * + * {
+	margin-block-start: var(--wd-space-xs);
 }
 
 .wicket-directory .wicket-directory-card__title {
 	display: block;
 }
 
-.wicket-directory .wicket-directory-card__job-title,
-.wicket-directory .wicket-directory-card__org-type {
-	margin-block-start: calc(var(--wd-space-lg) * -0.5);
-	color: var(--wd-text-muted);
+/* Meta line: ID | type | tiers, split by thin rules (no characters for screen readers to read). */
+.wicket-directory .wicket-directory-card__meta {
+	display: flex;
+	flex-wrap: wrap;
+	row-gap: var(--wd-space-xs);
+	padding: 0;
+	list-style: none;
+	color: var(--wd-accent);
+	font-weight: bold;
+}
+
+.wicket-directory-card__meta > li {
+	margin: 0;
+}
+
+.wicket-directory-card__meta > li + li {
+	margin-inline-start: var(--wd-space-sm);
+	padding-inline-start: var(--wd-space-sm);
+	border-inline-start: var(--wd-border-width) solid var(--wd-divider);
 }
 
 .wicket-directory-card__description p {
@@ -352,50 +391,38 @@
 	text-decoration: underline;
 }
 
+/* Columns: Details, Address, Contact. */
 .wicket-directory-card__columns {
 	display: flex;
 	flex-direction: column;
 	gap: var(--wd-space-lg);
+	color: var(--wd-text-muted);
 }
 
 .wicket-directory-card__column {
 	flex: 1 1 0;
 	min-width: 0;
-	margin: 0;
-	padding: 0;
-	list-style: none;
 	overflow-wrap: anywhere;
 }
 
-.wicket-directory-card__detail + .wicket-directory-card__detail,
+.wicket-directory .wicket-directory-card__column-title {
+	margin: 0 0 var(--wd-space-xs);
+	color: inherit;
+	font-size: inherit;
+	font-weight: bold;
+	line-height: inherit;
+}
+
+.wicket-directory .wicket-directory-card__column :is(p, address, ul) {
+	margin: 0;
+	padding: 0;
+	font-style: normal;
+	list-style: none;
+}
+
 .wicket-directory-card__address + .wicket-directory-card__address,
 .wicket-directory-card__contact + .wicket-directory-card__contact {
 	margin-block-start: var(--wd-space-sm);
-}
-
-.wicket-directory-card__details dt {
-	font-size: var(--wd-font-size-label);
-	font-weight: bold;
-}
-
-.wicket-directory-card__details dd {
-	margin: 0;
-}
-
-.wicket-directory-card__address {
-	display: flex;
-	align-items: baseline;
-	gap: var(--wd-space-sm);
-}
-
-.wicket-directory-card__address address {
-	font-style: normal;
-}
-
-.wicket-directory-card__phone {
-	display: inline-flex;
-	align-items: center;
-	gap: var(--wd-space-sm);
 }
 
 .wicket-directory-card__actions,
@@ -409,6 +436,12 @@
 	.wicket-directory .wicket-directory-card {
 		flex-direction: row;
 		align-items: flex-start;
+		gap: var(--wd-space-xl);
+	}
+
+	/* The logo sits right of the content; it stays first in the markup so it tops a narrow card. */
+	.wicket-directory-card--organization .wicket-directory-card__media {
+		order: 1;
 	}
 
 	.wicket-directory-card__columns {

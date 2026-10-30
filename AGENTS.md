@@ -121,7 +121,7 @@ There is **one render path**. The frontend and the block editor preview both go 
   - `wicket_get_resource_type_name_by_slug()`: refetches everything on every call
   - `wicket_get_*_connections_by_id()`: its static cache ignores the ID
 - **Styling:**
-  - Use only Wicket theme CSS variables (`--color-*`, `--spacing-*`, `--border-radius-*`, `--box-shadow-*`, `--font-size-*`, `--layout-*`), each with a fallback value. Map them onto the `--wd-*` layer (the first `.wicket-directory {}` rule); every other rule uses only `--wd-*`.
+  - Use only the CSS variables the Wicket theme prints at runtime, each with a fallback value: its Theme Styling options (`--text-*`, `--interactive`, `--bg-*`, `--border-*`, `--space-*`, `--*-corner-radius`, `--elevation-*`), its typography set (`--{style}-font-size`) and theme.json custom values (`--wp--custom--*`). Not the `--color-*` / `--spacing-*` names in the theme's `_theme-json.scss`: that file isn't compiled, so they never exist on a site. Map them onto the `--wd-*` layer (the first `.wicket-directory {}` rule); every other rule uses only `--wd-*`.
   - No hard-coded colours or sizes outside that layer, and no Tailwind utilities in our own markup. `qa`'s `DirectoryCssTest` enforces both.
   - Use container queries for card layout.
   - Styles only non-Wicket themes need go under `.wicket-directory--standalone`, so they never fight the Wicket theme's own.
