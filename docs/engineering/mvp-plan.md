@@ -258,7 +258,7 @@ The directory name is the post title. Publish and Save Draft are WordPress's own
 4. The block editor UI: the Settings sidebar controls above, placeholder, draft notice, `ServerSideRender`, and the `@wordpress/scripts` build. The build output (`build/`) is kept in the repo, not gitignored.
 5. Admin meta boxes and list columns.
 6. QA registration and tests.
-7. Phase 2 backlog, not part of this build:
+7. Phase 2 backlog, not part of this build (tickets in [phase-2-tickets.md](phase-2-tickets.md)):
    - Groups directory and group roster;
    - Organization Contact;
    - Developer panel UI;

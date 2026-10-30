@@ -151,6 +151,7 @@ PHP CS Fixer rules are `@PSR12`, `@PER-CS` and `@PHP82Migration`, configured in 
 |---|---|
 | `docs/engineering/mvp-plan.md` | Developers & agents: approved MVP plan and decisions |
 | `docs/engineering/mvp-tickets.md` | Developers & agents: numbered MVP build tickets (`{step}.{n}`, e.g. 2.3) with dependencies, acceptance criteria and status. When asked to "do ticket X.Y", read that ticket and its dependencies first, then set its Status when starting and finishing |
+| `docs/engineering/phase-2-tickets.md` | Developers & agents: Phase 2 build tickets (`P2.{n}`, e.g. P2.3): Groups, Organization Contact, the merge-tag editor, Developer tab, live preview. Same use as the MVP tickets; mirrors Asana's BUILD: Phase 2 section. Don't start them unless asked |
 | `docs/engineering/api-queries.md` | Developers & agents: verified MDP filters, sort keys, paging limits, tier lookup and contact-record fields, with example payloads. The MDP silently ignores unknown predicates, so use only the keys listed here |
 
 Docs follow the stack's docs conventions (see `wicket-wp-financial-fields/docs/AGENTS.md`): kebab-case names, required frontmatter (`title`, `audience`), and `docs/{product,engineering,guides}/`.
