@@ -45,7 +45,8 @@ Tests live in the shared QA suite at `../../../../../../qa/`, never in this repo
 wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-base-plugin, PHP 8.3; WICKET_DIRECTORY_* constants
   dependency guard               (landed) function_exists('Wicket') → else admin notice + early return; activation hook checks PHP + base
   Plugin::get_instance()         (landed) singleton; plugin_setup() on plugins_loaded:100 (after the base plugin's :99 setup); text domain
-    DirectoryPostType            (landed) CPT `wicket_directory` (caps → manage_options, classic editor) + `_wicket_directory_config` post meta (REST `edit` context only)
+    DirectoryPostType            (landed) CPT `wicket_directory` (caps → manage_options, classic editor; menu icon = assets/images/menu-icon.svg as a base64
+                                 data URI, one root `fill` so svg-painter can recolour it) + `_wicket_directory_config` post meta (REST `edit` context only)
                                  + read-only `directory_type` REST field (`view` context), so the block editor knows each directory's type
       → Config\DirectoryConfig   (landed) typed config: defaults(type), from_post(post), sanitize(input, ?previous), to_array(); Config\DirectoryType enum
     Admin\DirectoryMetaBoxes     (landed, admin only) one "Directory settings" meta box (render_box → views/settings.php); posts `wicket_directory[...]`;

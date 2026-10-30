@@ -90,7 +90,7 @@ final class DirectoryPostType
             'show_in_nav_menus'   => false,
             'show_in_admin_bar'   => false,
             'show_in_rest'        => true,
-            'menu_icon'           => 'dashicons-groups',
+            'menu_icon'           => $this->menu_icon(),
             'hierarchical'        => false,
             'has_archive'         => false,
             'rewrite'             => false,
@@ -102,6 +102,27 @@ final class DirectoryPostType
             'map_meta_cap'        => true,
             'capabilities'        => $this->capabilities(),
         ]);
+    }
+
+    /**
+     * Admin menu icon: assets/images/menu-icon.svg as a base64 data URI.
+     *
+     * The admin's svg-painter script recolours the `fill` attribute to match
+     * the menu's default, hover and current states, so the file keeps a single
+     * fill on its root. Falls back to a dashicon if the file can't be read.
+     *
+     * @return string
+     */
+    private function menu_icon(): string
+    {
+        $file = dirname(__DIR__, 2) . '/assets/images/menu-icon.svg';
+        $svg = is_readable($file) ? file_get_contents($file) : false;
+
+        if ($svg === false || $svg === '') {
+            return 'dashicons-groups';
+        }
+
+        return 'data:image/svg+xml;base64,' . base64_encode($svg);
     }
 
     /**
