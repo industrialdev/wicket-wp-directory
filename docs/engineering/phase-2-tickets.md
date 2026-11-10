@@ -1,7 +1,7 @@
 ---
 title: "Phase 2 Tickets"
 audience: [developer, agent]
-updated: 2026-10-30
+updated: 2026-11-10
 ---
 
 # `wicket-wp-directory` Phase 2 tickets
@@ -18,7 +18,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 
 | ID | Ticket | Depends on | Status |
 |---|---|---|---|
-| P2.0 | [API spike: groups, group members, connections and membership owner](#p20) | — | To do |
+| P2.0 | [API spike: groups, group members, connections and membership owner](#p20) | — | Done |
 | P2.1 | [Groups directory type: config, query builder and eligibility](#p21) | P2.0 | To do |
 | P2.2 | [Group card template](#p22) | P2.1 | To do |
 | P2.3 | [Group roster page: Default View, Back to Directory, own search, filters, sort and paging](#p23) | P2.2 | To do |
@@ -51,6 +51,8 @@ Verify against the staging MDP (as 0.1 did for people and organizations) and rec
 - Every filter, sort key and include used by P2.1–P2.6 is verified with a no-match check (→ 0) and listed in api-queries.md.
 - The per-page batch requests for member counts, owners and connections are documented. No per-row calls.
 
+**Outcome (2026-11-10):** see [api-queries.md](api-queries.md#groups-directory-groupsquery), from "Groups directory" to "Labels", and its [Phase 2 corrections](api-queries.md#phase-2-corrections). Everything was verified with no-match checks except three positive cases staging has no data for: an inactive group, an inactive-only group member, and an owner with an active connection to their own org. `primary_organization` is null for every person, so it is unverified. P2.1, P2.3, P2.5 and P2.6 below have been updated with the verified names and the decisions they now need to make.
+
 ## 1. Groups
 
 <a id="p21"></a>
@@ -63,12 +65,12 @@ Add a third directory type, Group, alongside Individual and Organization.
 
 - `DirectoryType::Group`, with sort options Name A–Z / Z–A.
 - Group eligibility config: Group Status (All / Active / Inactive, default Active), group types (chip picker), and "Groups which shouldn't be displayed" (an exclude list, stored by UUID, picked by name).
-- `GroupQueryBuilder` (extends `QueryBuilder`) → `DirectoryQuery`; keyword on the group name; facets.
-- `DirectoryRepository` support, including the per-page active member count batch from P2.0.
+- `GroupQueryBuilder` (extends `QueryBuilder`) → `DirectoryQuery` on `groups/query`: status `active_eq`, types `resource_type_slug_in` (**not** `type_in`, which groups ignore), exclude list `uuid_not_in`, keyword `name_{lang}_cont`, sort `name_{lang}`; facets (group type only: no schema is bound to groups).
+- `DirectoryRepository` support, including the active member count. Decide between `attributes.active_member_count` (free, but counts active rows, so a member with overlapping terms counts twice) and one `group_members/query` batch per page that counts distinct people. P2.0 recommends the batch, so the card agrees with the roster (api-queries.md, Phase 2 corrections item 2).
 - `EntryMapper` → `GroupEntry` (name, status, type label, description, active member count). The `wicket_directory/entry` filter applies.
 - Admin: Group in the Type select, the group eligibility panels, and Card View / Filters tabs showing group fields only.
 - Block editor: group directories in the picker, sort options per type.
-- The status and exclude filters apply everywhere a group from this directory can be reached (listing, roster link, Default View).
+- The status and exclude filters apply everywhere a group from this directory can be reached (listing, roster link, Default View). The roster's group lookup is `groups/query` with `uuid_in` plus every eligibility key (verified in P2.0).
 
 **Acceptance criteria:**
 
@@ -105,8 +107,9 @@ View Members shows one group's members on the same page, server-rendered from GE
 - Directory setting **Default View**: Group List (browse, then click in), Group Members (always one chosen group's roster), Group List + Member List (both).
 - A roster GET param (e.g. `wd{ID}_group`) selects the group. The roster has its own prefixed keyword, location, facet, sort and page params, so using it never resets the group list's state, and vice versa.
 - Header: Back to Directory link (only in the "+ Member List" mode), group type eyebrow, title, group description from the MDP.
-- **Group Member Status** setting (Active / Inactive / All) decides which members appear. Separate from the card's active member count, which is always active only.
-- Roster keyword matches name and role; roster sort and page size (falls back to the directory's).
+- The roster is a `people/query` joined with `group_members_group_uuid_eq`, so each person appears once and the MVP person filters, sort and facets carry over (P2.0). Not `groups/{uuid}/people`, which pages by term.
+- **Group Member Status** setting (Active / Inactive / All) decides which members appear. Separate from the card's active member count, which is always active only. Active = `group_members_active_eq: true`; All = no key; Inactive = no active row in the group, which takes one request for the active people's UUIDs and then `uuid_not_in` (`group_members_active_eq: false` would also list current members with past terms).
+- Roster keyword matches name and role. The role part matches role labels in PHP and ORs the slugs as `group_members_resource_type_slug_in`. Roster sort uses person keys only (a join sort is an HTTP 500); page size falls back to the directory's.
 - Block: roster results per page and Collapse Refine by default for the roster; settings that don't apply to the chosen Default View are hidden.
 - An inactive or excluded group can't be reached through a direct roster link.
 
@@ -125,7 +128,7 @@ View Members shows one group's members on the same page, server-rendered from GE
 
 `templates/cards/card-group-member.php`: the individual card plus four group-membership fields that exist only on a roster row.
 
-- Role (plain text), in-group status pill (from the group membership's active flag, not the person's account status), start date, end date ("Present" when absent).
+- Role (plain text, the `group_members` resource-type label), in-group status pill (from the group membership's active flag, not the person's account status), start date, end date ("Present" when absent). They come from one `group_members/query` batch per roster page; a person can have several rows, so use the first by `-start_date` (P2.0).
 - Card config mirrors the individual card: profile image, role, membership status, start/end date, member ID, tier, title, employer, address (format, type, flags), email, phone, website.
 - Its own facet set for the roster's Refine Results, separate from the group list's.
 - Admin: in "Group List + Member List" mode, a switch above the Card View and Filters tabs picks Group Card or Group Member Card. In the other modes only the card that can be reached is shown.
@@ -149,7 +152,8 @@ Show who to contact for an organization on its card. Config under the org card:
 - **Membership Owner** mode: the org membership's owner. Optional "Display relationship type": when relationship types are picked, show the owner only if they have an active relationship of one of those types to this org, and show the type label next to the name. With no types picked, always show the owner.
 - **Relationship Type(s)** mode: every person with an active relationship of the selected type(s) to the org (any type when none are selected). Can be one person or a team.
 - Per-contact toggles: name, title, email, phone. Contact records go through `ContactResolver`.
-- One batch request per page of orgs (from P2.0), cached with the page. Never per row.
+- Batch requests per page of orgs (from P2.0), cached with the page. Never per row. The owner is `organization_memberships.relationships.owner`, from the tier batch with `include=owner`; contacts are `connections/query` (`organization_uuid_in`, `active_eq`, `resource_type_slug_in`); emails and phones need one more `people/query` `uuid_in` request, because nested includes don't work.
+- Decide which owner to show when an org has several active memberships with different owners (2 of 10 orgs on staging): the configured tiers' membership, every distinct owner, or one.
 - The section disappears when nobody qualifies (no placeholder).
 
 **Acceptance criteria:**
@@ -165,7 +169,7 @@ Show who to contact for an organization on its card. Config under the org card:
 
 Add the individual-card fields the prototype has but the MVP left out (see 5.5 in [mvp-tickets.md](mvp-tickets.md#55)).
 
-- Employer: the person's organization from connections (primary organization, or an active connection of the selected relationship types), legal name in the current language.
+- Employer: the person's organization from connections (an active connection of the selected relationship types), legal name in the current language. One `connections/query` batch with `person_uuid_in` and `include=organization` (P2.0). "Primary organization" is unverified: `primary_organization` is null for every person on staging, so decide whether to support it before building it.
 - Designation: a data field appended to the name line (no stray comma when empty).
 - Person ⟷ Org relationship types: which types count for Employer, and an option to show the type label.
 - Decide whether the prototype's "Display Contact Details" parent toggle is needed on top of the per-field toggles.
