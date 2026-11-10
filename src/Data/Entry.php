@@ -45,7 +45,12 @@ abstract class Entry
     protected const SHAPE_MAP = 'map';
 
     /**
-     * @param string                   $id        Person or organization UUID.
+     * Shape of a count: an integer of 0 or more, or null for "not shown".
+     */
+    protected const SHAPE_COUNT = 'count';
+
+    /**
+     * @param string                   $id        Person, organization or group UUID.
      * @param string                   $name      Display name, the card title.
      * @param string                   $member_id Member ID (`display_identifying_number`).
      * @param list<string>             $tiers     Active membership tier names.
@@ -146,6 +151,15 @@ abstract class Entry
     {
         if ($shape === self::SHAPE_STRING) {
             return self::string($value) ?? $current;
+        }
+
+        if ($shape === self::SHAPE_COUNT) {
+            return match (true) {
+                $value === null                          => null,
+                is_int($value)                           => max(0, $value),
+                is_string($value) && ctype_digit($value) => (int) $value,
+                default                                  => $current,
+            };
         }
 
         if (!is_array($value)) {

@@ -19,7 +19,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | ID | Ticket | Depends on | Status |
 |---|---|---|---|
 | P2.0 | [API spike: groups, group members, connections and membership owner](#p20) | — | Done |
-| P2.1 | [Groups directory type: config, query builder and eligibility](#p21) | P2.0 | To do |
+| P2.1 | [Groups directory type: config, query builder and eligibility](#p21) | P2.0 | Done |
 | P2.2 | [Group card template](#p22) | P2.1 | To do |
 | P2.3 | [Group roster page: Default View, Back to Directory, own search, filters, sort and paging](#p23) | P2.2 | To do |
 | P2.4 | [Group Member card, with its own card config and facets](#p24) | P2.3 | To do |
@@ -78,6 +78,15 @@ Add a third directory type, Group, alongside Individual and Organization.
 - An Inactive or excluded group never appears, including through a direct link.
 - Unit tests for the builder (eligibility, keyword and sort combinations), config sanitize and the type-change reset.
 
+**Outcome (2026-11-10):**
+
+- **Config.** `DirectoryType::Group` (`group`), sorts `name_asc` / `name_desc`. Eligibility gained `group_status` (`active` / `inactive` / `all`, default `active`), `group_types` (slugs) and `excluded_groups` (lower-case UUIDs). Every type stores every eligibility key; keys that don't apply keep their defaults, so a group directory never has tiers or an opt-in, and other types never have group conditions. Existing configs read back with the three new keys at their defaults (the cache key changes once). Group card keys: `status`, `group_type`, `description`, `member_count` (all on). The View Members toggle comes with the roster link (P2.2/P2.3). Facets: a new `group_type` source, the only one a group directory accepts; data-field facets are dropped for groups (no schema is bound to them).
+- **Query.** `GroupQueryBuilder` sends exactly the P2.0 keys and no `include` (`DirectoryQuery::path()` drops an empty one). Groups have no location: `DirectoryType::has_location()` is false, `RequestParams` ignores the param, the search bar has no location field, and the block editor hides its Hide Location toggle. `GroupQueryBuilder::lookup()` + `DirectoryRepository::group()` are the direct-link guard: `uuid_in` plus every eligibility key, uncached, and the returned ID must match. P2.3 must reach groups only through it.
+- **Member count: the batch.** One `group_members/query` per page (`group_uuid_in` + `active_eq: true`, size 2000) counts distinct people, so the card agrees with the roster. Past 2000 rows, or if the batch fails (logged, page not cached), the card falls back to `active_member_count`. The batch runs only when the card shows the count.
+- **Data.** `GroupEntry` (`status`, `group_type`, `group_type_label`, `description`, `member_count`; `null` = hidden); the inherited contact and tier fields stay empty. `EnumLabels::group_types()` reads `resource_types` (`wicket_get_resource_types()`) and shares the label transient.
+- **Admin.** Group status, group types and "Groups which shouldn't be displayed" panels; tiers, active-members and opt-in panels hide for groups (`data-wd-type` now takes space-separated types). `Admin\Groups` loads every group (one `groups/query`, 2000) only for a saved group directory; unnamed groups show as "Unnamed group (slug)".
+- **Not in this ticket:** `cards/card-group.php` (P2.2). Until it lands, a group directory renders its search, filters, count and paging, but empty cards.
+
 <a id="p22"></a>
 
 ### P2.2 — Group card template
@@ -87,7 +96,7 @@ Add a third directory type, Group, alongside Individual and Organization.
 `templates/cards/card-group.php`, theme-overridable like the other cards.
 
 - Layout per the prototype: name and status pill inline, group type below, active member count and a "View Members" button right-aligned on the same row. No image.
-- Card toggles: status pill, group type, member count, description, View Members button (when off, the card has no way to reach the roster).
+- Card toggles: status pill, group type, member count, description (config keys `status`, `group_type`, `member_count`, `description`, added in P2.1), View Members button (when off, the card has no way to reach the roster; add its card key here or in P2.3).
 - Same rules as 3.6/3.7: base components, `--wd-*` tokens only, container query, everything escaped.
 
 **Acceptance criteria:**

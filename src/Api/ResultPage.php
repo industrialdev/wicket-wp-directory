@@ -27,9 +27,14 @@ final class ResultPage
      *                                                 total_pages when there are results.
      * @param int                         $total_pages Number of pages; 0 when there are no results.
      * @param int                         $per_page    Page size.
-     * @param array<string, list<Tier>>   $tiers       Active membership tiers keyed by entity UUID.
-     *                                                 Only filled when the card's tier toggle is on.
-     * @param bool                        $unavailable The API failed; the page is empty for that reason.
+     * @param array<string, list<Tier>>   $tiers         Active membership tiers keyed by entity UUID.
+     *                                                   Only filled when the card's tier toggle is on.
+     * @param bool                        $unavailable   The API failed; the page is empty for that reason.
+     * @param array<string, int>          $member_counts Distinct active members keyed by group UUID, for
+     *                                                   every group on the page. Only filled for group
+     *                                                   directories whose card shows the count, and only
+     *                                                   when the count is complete; EntryMapper falls
+     *                                                   back to the group's `active_member_count`.
      */
     public function __construct(
         public readonly array $items,
@@ -40,6 +45,7 @@ final class ResultPage
         public readonly int $per_page,
         public readonly array $tiers = [],
         public readonly bool $unavailable = false,
+        public readonly array $member_counts = [],
     ) {}
 
     /**
@@ -110,6 +116,9 @@ final class ResultPage
             $data['total_pages'],
             $data['per_page'],
             $data['tiers'],
+            false,
+            // Pages cached before groups existed have no counts.
+            is_array($data['member_counts'] ?? null) ? array_filter($data['member_counts'], 'is_int') : [],
         );
     }
 
@@ -118,7 +127,7 @@ final class ResultPage
      *
      * Unavailable pages are never cached, so the flag isn't part of it.
      *
-     * @return array{items: list<array<string, mixed>>, included: list<array<string, mixed>>, total: int, page: int, total_pages: int, per_page: int, tiers: array<string, list<Tier>>}
+     * @return array{items: list<array<string, mixed>>, included: list<array<string, mixed>>, total: int, page: int, total_pages: int, per_page: int, tiers: array<string, list<Tier>>, member_counts: array<string, int>}
      */
     public function to_array(): array
     {
@@ -129,7 +138,8 @@ final class ResultPage
             'page'        => $this->page,
             'total_pages' => $this->total_pages,
             'per_page'    => $this->per_page,
-            'tiers'       => $this->tiers,
+            'tiers'         => $this->tiers,
+            'member_counts' => $this->member_counts,
         ];
     }
 
@@ -173,6 +183,42 @@ final class ResultPage
     public function tiers_for(string $id): array
     {
         return $this->tiers[$id] ?? [];
+    }
+
+    /**
+     * A copy with other tiers.
+     *
+     * @param array<string, list<Tier>> $tiers Tiers keyed by entity UUID.
+     *
+     * @return self
+     */
+    public function with_tiers(array $tiers): self
+    {
+        return new self($this->items, $this->included, $this->total, $this->page, $this->total_pages, $this->per_page, $tiers, $this->unavailable, $this->member_counts);
+    }
+
+    /**
+     * A copy with other member counts.
+     *
+     * @param array<string, int> $member_counts Distinct active members keyed by group UUID.
+     *
+     * @return self
+     */
+    public function with_member_counts(array $member_counts): self
+    {
+        return new self($this->items, $this->included, $this->total, $this->page, $this->total_pages, $this->per_page, $this->tiers, $this->unavailable, $member_counts);
+    }
+
+    /**
+     * Distinct active members of one group, if the page counted them.
+     *
+     * @param string $id Group UUID.
+     *
+     * @return int|null Null when the page has no count for the group.
+     */
+    public function member_count_for(string $id): ?int
+    {
+        return $this->member_counts[$id] ?? null;
     }
 
     /**

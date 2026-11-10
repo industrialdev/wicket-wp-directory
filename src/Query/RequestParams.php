@@ -16,7 +16,8 @@ use Wicket\Directory\Config\DirectoryConfig;
  *
  * Instances only come from from_request(), so every value is sanitized and
  * validated: unknown facet values and sorts are dropped, the page is at least 1,
- * and params for controls the block hides are ignored.
+ * and params for controls the block hides are ignored. So is the location of
+ * a type that has none (groups).
  *
  * @phpstan-import-type Facet from DirectoryConfig
  */
@@ -90,7 +91,7 @@ final class RequestParams
         return new self(
             $directory_id,
             $hide_keyword ? '' : self::text($raw('keyword')),
-            $hide_location ? '' : self::text($raw('location')),
+            $hide_location || !$config->type->has_location() ? '' : self::text($raw('location')),
             $sort,
             self::page($raw('pg')),
             $hide_filters ? [] : self::facets($config->facets, $facet_options, $raw),
@@ -112,8 +113,8 @@ final class RequestParams
     /**
      * The key that identifies a facet in GET params and option lists.
      *
-     * `org_type` for the org-type facet; `{schema_key}__{field}` for a data
-     * field. Case is kept, and there are no dots, because PHP turns dots in
+     * `org_type` for the org-type facet, `group_type` for the group-type
+     * facet; `{schema_key}__{field}` for a data field. Case is kept, and there are no dots, because PHP turns dots in
      * GET keys into underscores.
      *
      * @param Facet $facet A facet from DirectoryConfig::$facets.
@@ -122,8 +123,8 @@ final class RequestParams
      */
     public static function facet_key(array $facet): string
     {
-        if ($facet['source'] === DirectoryConfig::FACET_ORG_TYPE) {
-            return DirectoryConfig::FACET_ORG_TYPE;
+        if ($facet['source'] === DirectoryConfig::FACET_ORG_TYPE || $facet['source'] === DirectoryConfig::FACET_GROUP_TYPE) {
+            return $facet['source'];
         }
 
         return $facet['schema_key'] . '__' . $facet['field'];

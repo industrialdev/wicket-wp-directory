@@ -4,8 +4,8 @@ Wicket Directory adds configurable public directories of **Individuals** and **O
 
 > **Status: in development (scaffold landed).** The approved plan is `docs/engineering/mvp-plan.md`. Read it before writing code; it is the source of truth for scope, data model and decisions. Classes and paths below are the planned layout unless marked as landed. Update this file as they land.
 
-MVP scope: Individual and Organization directories only. These are deferred to phase 2, so don't build them without being asked:
-- Groups directories and group rosters
+MVP scope: Individual and Organization directories only. Phase 2 (`docs/engineering/phase-2-tickets.md`) is under way: the Group directory type landed in P2.1 (config, query builder, eligibility, data, admin); its card template is P2.2. These are still deferred, so don't build them without being asked:
+- the group card (P2.2) and group rosters (P2.3, P2.4)
 - Organization Contact (Membership Owner / Relationship Types)
 - the Developer panel UI
 - the `[col]/{{field}}` merge-tag card editor
@@ -49,23 +49,28 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
                                  data URI, one root `fill` so svg-painter can recolour it) + `_wicket_directory_config` post meta (REST `edit` context only)
                                  + read-only `directory_type` REST field (`view` context), so the block editor knows each directory's type
       → Config\DirectoryConfig   (landed) typed config: defaults(type), from_post(post), sanitize(input, ?previous), to_array(); Config\DirectoryType enum
+                                 (individual | organization | group; has_location() is false for groups). Every type stores every eligibility key; keys
+                                 that don't apply keep their defaults (groups: no tiers/opt-in; others: no group_status/group_types/excluded_groups)
     Admin\DirectoryMetaBoxes     (landed, admin only) one "Directory settings" meta box (render_box → views/settings.php); posts `wicket_directory[...]`;
                                  save_post handler lays the posted SECTIONS (`type`, `eligibility`, `card`, `facets`) over the stored config
                                  → DirectoryConfig::sanitize(…, previous) (nonce, manage_options + edit_post). Directory panels on top (views/directory.php:
-                                 type select, chip pickers for tiers/org types, active-members, opt-in), then tabs Card View (views/card.php; one checklist in
+                                 type select, chip pickers for tiers/org types, active-members, opt-in; for groups: Group status, group types, groups to exclude.
+                                 `data-wd-type` takes space-separated types), then tabs Card View (views/card.php; one checklist in
                                  card_groups(type) order, card_fields(type) lists its controls; ticked items reveal their options) and Filters
-                                 (views/filters.php; facet_choices(type, schemas) = org type + enum data fields; a hidden `facets` marker lets "no rows" save;
+                                 (views/filters.php; facet_choices(type, schemas) = org type + enum data fields, or group type only; a hidden `facets` marker lets "no rows" save;
                                  searchable picker); views/chip-picker.php is the shared multi-select. Data-field pickers post "schema_key.field".
                                  assets/js/admin.js (no build): type toggles, tabs, popovers, chips, reveals and contact hints, facet repeater;
                                  assets/css/admin.css styles the box. Everything posts the same without the script
       → Admin\MembershipTiers    (landed) tier choices from GET memberships, filtered by type
-      → Admin\ResourceTypes      (landed) one GET resource_types: org types and contact record types (ContactResolver::RELATIONSHIPS)
-      → Admin\SchemaFields       (landed) GET json_schemas?include=json_schema_resources: the type's text/list data fields, with an enum flag
+      → Admin\ResourceTypes      (landed) one GET resource_types: org types, group types and contact record types (ContactResolver::RELATIONSHIPS)
+      → Admin\SchemaFields       (landed) GET json_schemas?include=json_schema_resources: the type's text/list data fields, with an enum flag (none for groups)
+      → Admin\Groups             (landed) one groups/query (2000, sorted name_{lang}): every group for the exclude picker; loaded for saved group directories only
     Admin\ListColumns            (landed, admin only) Type and Status columns after Title on All Directories; non-published rows say "Not shown on the site"
     Block\DirectoryBlock         (landed) dynamic block `wicket/directory` registered from build/directory (built from blocks/directory); adds the `wicket` category if missing;
                                  render_callback → DirectoryRenderer; enqueue_style() puts directory.css in the <head> of a post that has the block;
                                  enqueue_editor_data() prints window.wicketDirectoryEditor.sortOptions (DirectoryType::sort_options() per type) before the editor script
-      blocks/directory/edit.js   (landed) sidebar (published directories via useEntityRecords, context view), Placeholder, ServerSideRender in <Disabled>, unpublished-selection Notice
+      blocks/directory/edit.js   (landed) sidebar (published directories via useEntityRecords, context view), Placeholder, ServerSideRender in <Disabled>, unpublished-selection Notice;
+                                 no Hide Location toggle for group directories
       → Block\BlockAttributes    (landed) from_array(attributes): sanitized, resultsPerPage clamped 1–50; sort(DirectoryType) resolves defaultSort
 ```
 
@@ -79,13 +84,17 @@ Block render_callback / ServerSideRender
   → Render\DirectoryRenderer   (landed) render(BlockAttributes)
       → load directory post (missing/trashed/not `publish` → '' for visitors; parts/notice.php in the editor preview)
       → Data\FacetOptions        (landed) for_config(config, lang) → facet key => [{value, label}] from enums; values() → RequestParams' allow-list
-      → Query\RequestParams      (landed) flat GET params prefixed `wd{ID}_…`; sort tokens from DirectoryType::sort_options()
+      → Query\RequestParams      (landed) flat GET params prefixed `wd{ID}_…`; sort tokens from DirectoryType::sort_options(); location ignored for groups
       → do_action before_render, before_render_{slug} (before the API query; echoed output comes first)
-      → Query\OrganizationQueryBuilder | PersonQueryBuilder (landed) → Query\DirectoryQuery (landed; path() + body(), or matches_nothing)
+      → Query\OrganizationQueryBuilder | PersonQueryBuilder | GroupQueryBuilder (landed) → Query\DirectoryQuery (landed; path() + body(), or matches_nothing)
+          GroupQueryBuilder: groups/query, active_eq / resource_type_slug_in / uuid_not_in, name_{lang}_cont, sort name_{lang}, no include;
+          lookup(config, uuid) = uuid_in + every eligibility key, for anything that reaches a group outside the listing (roster links)
       → Api\DirectoryRepository  (landed) builder by type → API + transient cache → Api\ResultPage (landed; `unavailable` on API failure)
-      → Data\EntryMapper (landed; map(page, config, slug, lang) → Data\PersonEntry | Data\OrganizationEntry, immutable, raw values, empty = hidden)
+          group directories: one group_members/query batch per page → ResultPage::member_counts (distinct active people; falls back to
+          active_member_count past 2000 rows or on failure); group(directory, config, uuid) → the eligible group or null (uncached)
+      → Data\EntryMapper (landed; map(page, config, slug, lang) → Data\PersonEntry | OrganizationEntry | GroupEntry, immutable, raw values, empty = hidden)
           uses Data\ContactResolver (landed; static resolve(field, records, rule), the truth table)
-          and Data\EnumLabels (landed; enum-key + org-type labels, one load per source per request; shared() keeps the maps in a transient per language)
+          and Data\EnumLabels (landed; enum-key, org-type and group-type labels, one load per source per request; shared() keeps the maps in a transient per language)
       → Render\TemplateLoader (landed) templates/directory.php → parts/*, cards/card-{type} (theme overrides at {theme}/wicket-directory/{name}.php)
           parts/search-bar (landed): search-form + location field
           parts/filters (landed): Refine Results checkbox groups (component-filter-form__* classes), Apply Filters, Clear All → clear_url
@@ -94,6 +103,7 @@ Block render_callback / ServerSideRender
           parts/no-results (landed): no-results message, or the alert component for an `unavailable` page
           cards/card-individual (landed): component-card-listing classes; details / address / contact columns; tag, button, link + icon components
           cards/card-organization (landed): same structure; org type under the name, logo, description with Show more / Show less (Alpine) past 40 words
+          cards/card-group (P2.2, not yet): until it lands, a group directory's list items render empty
           assets/css/directory.css (landed) block viewStyle + editorStyle; one --wd-* token layer on .wicket-directory (theme tokens + fallbacks);
             sidebar layout via @container; --standalone modifier (no Wicket theme) styles the panel, cards and pagination itself
 ```

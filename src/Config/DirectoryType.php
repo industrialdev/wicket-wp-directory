@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Wicket\Directory\Config;
 
 /**
- * What a directory lists: people or organizations.
+ * What a directory lists: people, organizations or groups.
  *
  * The backing value is what the config stores in its `type` key.
  */
@@ -13,6 +13,7 @@ enum DirectoryType: string
 {
     case Individual = 'individual';
     case Organization = 'organization';
+    case Group = 'group';
 
     /**
      * Translated name for admin screens.
@@ -24,6 +25,7 @@ enum DirectoryType: string
         return match ($this) {
             self::Individual   => __('Individual', 'wicket-directory'),
             self::Organization => __('Organization', 'wicket-directory'),
+            self::Group        => __('Group', 'wicket-directory'),
         };
     }
 
@@ -46,11 +48,24 @@ enum DirectoryType: string
                 'last_name_asc'   => __('Last Name (A–Z)', 'wicket-directory'),
                 'last_name_desc'  => __('Last Name (Z–A)', 'wicket-directory'),
             ],
-            self::Organization => [
+            self::Organization, self::Group => [
                 'name_asc'  => __('Name (A–Z)', 'wicket-directory'),
                 'name_desc' => __('Name (Z–A)', 'wicket-directory'),
             ],
         };
+    }
+
+    /**
+     * Whether visitors can search this type by location.
+     *
+     * Groups have no verified location predicate on `groups/query`, so a
+     * group directory has no location field and ignores its param.
+     *
+     * @return bool
+     */
+    public function has_location(): bool
+    {
+        return $this !== self::Group;
     }
 
     /**

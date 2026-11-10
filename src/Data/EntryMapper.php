@@ -15,7 +15,7 @@ use Wicket\ResponseHelper;
  *
  * - Contact records are matched to their owner with ResponseHelper and picked
  *   by ContactResolver.
- * - Data-field enum keys and org type slugs become labels through EnumLabels:
+ * - Data-field enum keys and org and group type slugs become labels through EnumLabels:
  *   one schema request and one resource-type request per page view at most,
  *   and only when a label is needed. There are no per-row API calls.
  * - Names and descriptions use the current language's attribute.
@@ -48,7 +48,7 @@ final class EntryMapper
      * @param string          $slug   The directory post's slug, for the entry_{slug} filter.
      * @param string|null     $lang   Two-letter language code. Defaults to wicket_get_current_language().
      *
-     * @return list<PersonEntry>|list<OrganizationEntry> One entry per item, in order.
+     * @return list<PersonEntry>|list<OrganizationEntry>|list<GroupEntry> One entry per item, in order.
      */
     public function map(ResultPage $page, DirectoryConfig $config, string $slug = '', ?string $lang = null): array
     {
@@ -61,9 +61,11 @@ final class EntryMapper
         $entries = [];
 
         foreach ($page->items as $item) {
-            $entry = $config->type === DirectoryType::Individual
-                ? $this->person($item, $response, $page, $config, $lang)
-                : $this->organization($item, $response, $page, $config, $lang);
+            $entry = match ($config->type) {
+                DirectoryType::Individual   => $this->person($item, $response, $page, $config, $lang),
+                DirectoryType::Organization => $this->organization($item, $response, $page, $config, $lang),
+                DirectoryType::Group        => $this->group($item, $page, $config, $lang),
+            };
 
             $entries[] = $this->apply_filters($entry, $item, $config, $slug);
         }
@@ -137,6 +139,58 @@ final class EntryMapper
     }
 
     /**
+     * Build a group's entry.
+     *
+     * The member count is the page's distinct-people count when it has one,
+     * else the group's `active_member_count` (which counts active rows).
+     *
+     * @param array<string, mixed> $item   `groups` resource.
+     * @param ResultPage           $page   The page, for member counts.
+     * @param DirectoryConfig      $config The directory's config.
+     * @param string               $lang   Language code.
+     *
+     * @return GroupEntry
+     */
+    private function group(array $item, ResultPage $page, DirectoryConfig $config, string $lang): GroupEntry
+    {
+        $card = $config->card;
+        $attributes = self::attributes($item);
+        $id = self::text($item['id'] ?? null);
+        $group_type = $card['group_type'] ? self::text($attributes['type'] ?? null) : '';
+        $member_count = null;
+
+        if ($card['member_count']) {
+            $fallback = $attributes['active_member_count'] ?? null;
+            $member_count = $page->member_count_for($id) ?? (is_int($fallback) ? max(0, $fallback) : null);
+        }
+
+        $status = '';
+
+        if ($card['status'] && is_bool($attributes['active'] ?? null)) {
+            $status = $attributes['active'] ? GroupEntry::STATUS_ACTIVE : GroupEntry::STATUS_INACTIVE;
+        }
+
+        return new GroupEntry(
+            id: $id,
+            name: self::localized($attributes, 'name', $lang),
+            member_id: '',
+            tiers: [],
+            addresses: [],
+            emails: [],
+            phones: [],
+            websites: [],
+            image_url: '',
+            eyebrow: '',
+            tags: [],
+            status: $status,
+            group_type: $group_type,
+            group_type_label: $group_type !== '' ? ($this->labels->group_types($lang)[$group_type] ?? $group_type) : '',
+            description: $card['description'] ? self::localized($attributes, 'description', $lang) : '',
+            member_count: $member_count,
+        );
+    }
+
+    /**
      * The values both entry types share, except the name.
      *
      * @param array<string, mixed> $item       Resource.
@@ -198,12 +252,12 @@ final class EntryMapper
      *
      * A filter that returns something other than an array is ignored.
      *
-     * @param PersonEntry|OrganizationEntry $entry  The mapped entry.
-     * @param array<string, mixed>          $item   The raw API resource.
-     * @param DirectoryConfig               $config The directory's config.
-     * @param string                        $slug   The directory post's slug.
+     * @param PersonEntry|OrganizationEntry|GroupEntry $entry  The mapped entry.
+     * @param array<string, mixed>                     $item   The raw API resource.
+     * @param DirectoryConfig                          $config The directory's config.
+     * @param string                                   $slug   The directory post's slug.
      *
-     * @return PersonEntry|OrganizationEntry
+     * @return PersonEntry|OrganizationEntry|GroupEntry
      */
     private function apply_filters(Entry $entry, array $item, DirectoryConfig $config, string $slug): Entry
     {
@@ -217,9 +271,9 @@ final class EntryMapper
          * template override. Unknown keys are dropped, and a value of the wrong
          * type keeps the original.
          *
-         * @param array           $data   PersonEntry or OrganizationEntry::to_array().
-         * @param array           $item   The raw `people` / `organizations` resource, with
-         *                                `attributes` (including `data_fields`).
+         * @param array           $data   PersonEntry, OrganizationEntry or GroupEntry::to_array().
+         * @param array           $item   The raw `people` / `organizations` / `groups` resource,
+         *                                with `attributes` (including `data_fields`).
          * @param DirectoryConfig $config The directory's config.
          */
         $filtered = apply_filters('wicket_directory/entry', $entry->to_array(), $item, $config);

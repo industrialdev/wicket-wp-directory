@@ -62,6 +62,11 @@ final class DirectoryQuery
     {
         $query = array_diff_key($this->args, ['filter' => true]);
 
+        // A type with nothing to include (groups) sends no `include` at all.
+        if (($query['include'] ?? null) === '') {
+            unset($query['include']);
+        }
+
         // Ruby doesn't like the numeric keys PHP adds to array params, e.g. page[0].
         $query = preg_replace('/\%5B\d+\%5D/', '%5B%5D', http_build_query($query));
 

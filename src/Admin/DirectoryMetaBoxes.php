@@ -73,18 +73,25 @@ final class DirectoryMetaBoxes
     private SchemaFields $schema_fields;
 
     /**
+     * Group choices for the exclude list.
+     */
+    private Groups $groups;
+
+    /**
      * Each data source is loaded once, however many panels use it. Tests pass
      * ones with fake loaders.
      *
      * @param MembershipTiers|null $tiers          Tier choices.
-     * @param ResourceTypes|null   $resource_types Organization and contact record types.
+     * @param ResourceTypes|null   $resource_types Organization, group and contact record types.
      * @param SchemaFields|null    $schema_fields  Data-field choices.
+     * @param Groups|null          $groups         Group choices for the exclude list.
      */
-    public function __construct(?MembershipTiers $tiers = null, ?ResourceTypes $resource_types = null, ?SchemaFields $schema_fields = null)
+    public function __construct(?MembershipTiers $tiers = null, ?ResourceTypes $resource_types = null, ?SchemaFields $schema_fields = null, ?Groups $groups = null)
     {
         $this->tiers = $tiers ?? new MembershipTiers();
         $this->resource_types = $resource_types ?? new ResourceTypes();
         $this->schema_fields = $schema_fields ?? new SchemaFields();
+        $this->groups = $groups ?? new Groups();
     }
 
     /**
@@ -157,7 +164,9 @@ final class DirectoryMetaBoxes
      * Print the Directory panels: type and eligibility.
      *
      * Tiers are listed for the stored type only. A type change clears them on
-     * save, so the box asks the admin to save before choosing new ones.
+     * save, so the box asks the admin to save before choosing new ones. The
+     * groups to exclude are loaded only for a saved group directory, for the
+     * same reason and to spare the request on other types.
      * Selections that the MDP no longer lists (or that couldn't be loaded) are
      * still shown, checked, so saving doesn't drop them silently.
      *
@@ -170,8 +179,11 @@ final class DirectoryMetaBoxes
         $config = DirectoryConfig::from_post($post) ?? DirectoryConfig::defaults();
         $lang = (string) wicket_get_current_language();
 
-        $tiers = $this->tiers->for_type($config->type, $lang);
+        $is_group = $config->type === DirectoryType::Group;
+        $tiers = $is_group ? [] : $this->tiers->for_type($config->type, $lang);
         $org_types = $this->resource_types->for('organizations', $lang);
+        $group_types = $this->resource_types->for('groups', $lang);
+        $groups = $is_group ? $this->groups->choices($lang) : [];
 
         $this->view('directory', [
             'field'           => self::FIELD,
@@ -179,10 +191,21 @@ final class DirectoryMetaBoxes
             'types'           => DirectoryType::cases(),
             /* translators: %s: Membership tier UUID. */
             'tiers'           => self::with_saved($tiers, $config->eligibility['membership_ids'], __('Unknown tier (%s)', 'wicket-directory')),
-            'tiers_failed'    => $this->tiers->failed(),
+            'tiers_failed'      => !$is_group && $this->tiers->failed(),
             /* translators: %s: Organization type slug. */
-            'org_types'       => self::with_saved($org_types, $config->eligibility['org_types'], __('Unknown type (%s)', 'wicket-directory')),
-            'org_types_empty' => $org_types === [],
+            'org_types'         => self::with_saved($org_types, $config->eligibility['org_types'], __('Unknown type (%s)', 'wicket-directory')),
+            'org_types_empty'   => $org_types === [],
+            /* translators: %s: Group type slug. */
+            'group_types'       => self::with_saved($group_types, $config->eligibility['group_types'], __('Unknown type (%s)', 'wicket-directory')),
+            'group_types_empty' => $group_types === [],
+            'group_statuses'    => [
+                DirectoryConfig::GROUP_STATUS_ACTIVE   => __('Active', 'wicket-directory'),
+                DirectoryConfig::GROUP_STATUS_INACTIVE => __('Inactive', 'wicket-directory'),
+                DirectoryConfig::GROUP_STATUS_ALL      => __('All', 'wicket-directory'),
+            ],
+            /* translators: %s: Group UUID. */
+            'groups'            => self::with_saved($groups, $config->eligibility['excluded_groups'], __('Unknown group (%s)', 'wicket-directory')),
+            'groups_failed'     => $is_group && $this->groups->failed($lang),
         ]);
     }
 
@@ -206,7 +229,7 @@ final class DirectoryMetaBoxes
         $schemas = $this->schema_fields->for_type($config->type, $lang);
         $fields = self::card_fields($config->type);
 
-        $tag_values = array_map(self::ref_value(...), $card['tag_chips']);
+        $tag_values = array_map(self::ref_value(...), $card['tag_chips'] ?? []);
         $refs = [];
 
         foreach ($fields['refs'] as $key => $ref) {
@@ -217,6 +240,11 @@ final class DirectoryMetaBoxes
         $contacts = [];
 
         foreach (ContactResolver::RELATIONSHIPS as $key => $resource_type) {
+            // Group cards have no contact rules.
+            if (!isset($fields['contacts'][$key])) {
+                continue;
+            }
+
             $saved = $card[$key]['type'] === DirectoryConfig::CONTACT_ANY ? [] : [$card[$key]['type']];
 
             $contacts[$key] = [
@@ -235,9 +263,9 @@ final class DirectoryMetaBoxes
             'refs'                  => $refs,
             'tag_chips'             => self::ref_choices($schemas, [SchemaFields::KIND_TEXT, SchemaFields::KIND_LIST], $tag_values),
             'tag_values'            => $tag_values,
-            'schemas_failed'        => $this->schema_fields->failed(),
+            'schemas_failed'        => $fields['refs'] !== [] && $this->schema_fields->failed(),
             'contacts'              => $contacts,
-            'resource_types_failed' => $this->resource_types->failed(),
+            'resource_types_failed' => $contacts !== [] && $this->resource_types->failed(),
             'address_formats'       => [
                 'full'                  => __('Full address', 'wicket-directory'),
                 'city_province_country' => __('City, province/state, country', 'wicket-directory'),
@@ -251,7 +279,8 @@ final class DirectoryMetaBoxes
      *
      * Rows are the configured facets, in order. The add picker offers every
      * data field with an enum (a facet's choices come from it) and, for
-     * organization directories, the organization type. Adding, removing and
+     * organization directories, the organization type. Group directories
+     * offer the group type only. Adding, removing and
      * reordering rows is `assets/js/admin.js`; without it, labels can still be
      * edited. A saved facet the picker no longer offers stays, marked: the
      * directory hides it from visitors until it has choices again.
@@ -296,7 +325,7 @@ final class DirectoryMetaBoxes
             'field'          => self::FIELD,
             'rows'           => $rows,
             'choices'        => $choices,
-            'schemas_failed' => $this->schema_fields->failed(),
+            'schemas_failed' => $config->type !== DirectoryType::Group && $this->schema_fields->failed(),
         ]);
     }
 
@@ -462,6 +491,19 @@ final class DirectoryMetaBoxes
                 ],
                 'contacts' => self::contact_labels(),
             ],
+            DirectoryType::Group => [
+                'toggles'  => [
+                    'status'       => ['label' => __('Status', 'wicket-directory'), 'description' => __('Active or Inactive, next to the name.', 'wicket-directory')],
+                    'group_type'   => ['label' => __('Group type', 'wicket-directory'), 'description' => ''],
+                    'description'  => ['label' => __('Description', 'wicket-directory'), 'description' => ''],
+                    'member_count' => [
+                        'label'       => __('Active member count', 'wicket-directory'),
+                        'description' => __('Counts each active member once. Adds one API request per page of results.', 'wicket-directory'),
+                    ],
+                ],
+                'refs'     => [],
+                'contacts' => [],
+            ],
         };
     }
 
@@ -469,8 +511,9 @@ final class DirectoryMetaBoxes
      * The order of the Card View list: groups of card keys, shown with a
      * divider between groups.
      *
-     * Every key of card_fields() is in exactly one group, plus `tag_chips`.
-     * `address_format` and `website_label` are shown under their contact rule.
+     * Every key of card_fields() is in exactly one group, plus `tag_chips`
+     * (not for groups). `address_format` and `website_label` are shown under
+     * their contact rule.
      *
      * @param DirectoryType $type Directory type.
      *
@@ -495,6 +538,11 @@ final class DirectoryMetaBoxes
             DirectoryType::Organization => [
                 ['logo', 'org_type', 'description'],
                 ...$shared,
+            ],
+            DirectoryType::Group => [
+                ['status', 'group_type'],
+                ['description'],
+                ['member_count'],
             ],
         };
     }
@@ -530,6 +578,21 @@ final class DirectoryMetaBoxes
             $choices[__('Organization', 'wicket-directory')][RequestParams::facet_key($org_type)] = $org_type;
         }
 
+        if ($type === DirectoryType::Group) {
+            $group_type = [
+                'source'     => DirectoryConfig::FACET_GROUP_TYPE,
+                'schema_key' => '',
+                'field'      => '',
+                'name'       => __('Group type', 'wicket-directory'),
+                'default'    => __('Group type', 'wicket-directory'),
+            ];
+            $group_type['placeholder'] = self::facet_placeholder($group_type);
+            $choices[__('Group', 'wicket-directory')][RequestParams::facet_key($group_type)] = $group_type;
+
+            // No JSON schema is bound to groups, so there are no data-field facets.
+            return $choices;
+        }
+
         foreach ($schemas as $schema_key => $schema) {
             foreach ($schema['fields'] as $field => $meta) {
                 if (!$meta['enum']) {
@@ -562,13 +625,15 @@ final class DirectoryMetaBoxes
      */
     private static function facet_placeholder(array $facet): string
     {
-        return $facet['source'] === DirectoryConfig::FACET_ORG_TYPE
-            ? __('Organization type', 'wicket-directory')
-            : $facet['field'];
+        return match ($facet['source']) {
+            DirectoryConfig::FACET_ORG_TYPE   => __('Organization type', 'wicket-directory'),
+            DirectoryConfig::FACET_GROUP_TYPE => __('Group type', 'wicket-directory'),
+            default                           => $facet['field'],
+        };
     }
 
     /**
-     * The code shown next to a facet: `org_type`, or `"schema_key.field"`.
+     * The code shown next to a facet: `org_type`, `group_type`, or `"schema_key.field"`.
      *
      * @param array{source: string, schema_key: string, field: string} $facet Facet.
      *
@@ -576,9 +641,9 @@ final class DirectoryMetaBoxes
      */
     private static function facet_code(array $facet): string
     {
-        return $facet['source'] === DirectoryConfig::FACET_ORG_TYPE
-            ? DirectoryConfig::FACET_ORG_TYPE
-            : $facet['schema_key'] . '.' . $facet['field'];
+        return $facet['source'] === DirectoryConfig::FACET_DATA_FIELD
+            ? $facet['schema_key'] . '.' . $facet['field']
+            : $facet['source'];
     }
 
     /**

@@ -2,8 +2,8 @@
 /**
  * The Directory panels: type and eligibility.
  *
- * Panels that depend on the type carry `data-wd-type`; `assets/js/admin.js`
- * shows them for the selected type. Elements with `data-wd-type-changed` show
+ * Panels that depend on the type carry `data-wd-type` (one type, or several
+ * separated by spaces); `assets/js/admin.js` shows them for the selected type. Elements with `data-wd-type-changed` show
  * only while the selected type differs from the saved one, and
  * `data-wd-type-unchanged` ones only while it matches. Without the script the
  * panels show the saved type's settings.
@@ -21,6 +21,11 @@
  *     tiers_failed: bool,
  *     org_types: array<string, string>,
  *     org_types_empty: bool,
+ *     group_types: array<string, string>,
+ *     group_types_empty: bool,
+ *     group_statuses: array<string, string>,
+ *     groups: array<string, string>,
+ *     groups_failed: bool,
  * } $args
  */
 
@@ -38,6 +43,14 @@ $opt_in_value = is_bool($opt_in['value']) ? ($opt_in['value'] ? 'true' : 'false'
 $chip_picker = static function (array $args): void {
     include __DIR__ . '/chip-picker.php';
 };
+
+/**
+ * The `hidden` attribute for a panel of some types, when the saved type isn't one of them.
+ *
+ * @param list<string> $types Directory type values.
+ */
+$hidden_unless = static fn (array $types): string => in_array($saved_type, $types, true) ? '' : 'hidden';
+$member_types = 'individual organization';
 ?>
 <div class="wicket-directory-settings" data-wicket-directory-settings data-saved-type="<?php echo esc_attr($saved_type); ?>">
     <div class="wd-panel">
@@ -53,7 +66,60 @@ $chip_picker = static function (array $args): void {
         </div>
     </div>
 
-    <div class="wd-panel" data-wd-type="organization" <?php echo $saved_type === 'organization' ? '' : 'hidden'; ?>>
+    <div class="wd-panel" data-wd-type="group" <?php echo $hidden_unless(['group']); ?>>
+        <label class="wd-panel__label" for="wicket-directory-group-status"><?php esc_html_e('Group status', 'wicket-directory'); ?></label>
+        <select id="wicket-directory-group-status" class="wd-field" name="<?php echo esc_attr($field); ?>[eligibility][group_status]">
+            <?php foreach ($args['group_statuses'] as $status => $label) : ?>
+                <option value="<?php echo esc_attr($status); ?>" <?php selected($eligibility['group_status'], $status); ?>><?php echo esc_html($label); ?></option>
+            <?php endforeach; ?>
+        </select>
+        <p class="wd-help"><?php esc_html_e('List only groups with this status. A group that isn\'t listed can\'t be reached through a link either.', 'wicket-directory'); ?></p>
+    </div>
+
+    <div class="wd-panel" data-wd-type="group" <?php echo $hidden_unless(['group']); ?>>
+        <p class="wd-panel__label"><?php esc_html_e('Group types', 'wicket-directory'); ?></p>
+        <?php if ($args['group_types'] !== []) : ?>
+            <?php
+            $chip_picker([
+                'name'     => $field . '[eligibility][group_types][]',
+                'label'    => __('Group types', 'wicket-directory'),
+                'choices'  => ['' => $args['group_types']],
+                'selected' => $eligibility['group_types'],
+            ]);
+            ?>
+        <?php endif; ?>
+        <?php if ($args['group_types_empty']) : ?>
+            <p><?php esc_html_e('No group types could be loaded from Wicket.', 'wicket-directory'); ?></p>
+        <?php endif; ?>
+        <p class="wd-help"><?php esc_html_e('List only groups of these types. Leave empty to list every type.', 'wicket-directory'); ?></p>
+    </div>
+
+    <div class="wd-panel" data-wd-type="group" <?php echo $hidden_unless(['group']); ?>>
+        <p class="wd-panel__label"><?php esc_html_e('Groups which shouldn\'t be displayed', 'wicket-directory'); ?></p>
+        <div data-wd-type-unchanged>
+            <?php if ($args['groups_failed']) : ?>
+                <div class="notice notice-error inline">
+                    <p><?php esc_html_e('Groups couldn\'t be loaded from Wicket. Saved groups are kept.', 'wicket-directory'); ?></p>
+                </div>
+            <?php endif; ?>
+            <?php if ($args['groups'] !== []) : ?>
+                <?php
+                $chip_picker([
+                    'name'     => $field . '[eligibility][excluded_groups][]',
+                    'label'    => __('Groups which shouldn\'t be displayed', 'wicket-directory'),
+                    'choices'  => ['' => $args['groups']],
+                    'selected' => $eligibility['excluded_groups'],
+                ]);
+                ?>
+            <?php elseif (!$args['groups_failed'] && $saved_type === 'group') : ?>
+                <p><?php esc_html_e('No groups were found.', 'wicket-directory'); ?></p>
+            <?php endif; ?>
+            <p class="wd-help"><?php esc_html_e('These groups are never listed, whatever their status and type.', 'wicket-directory'); ?></p>
+        </div>
+        <p class="wd-help" data-wd-type-changed hidden><?php esc_html_e('Save the directory to choose groups to exclude.', 'wicket-directory'); ?></p>
+    </div>
+
+    <div class="wd-panel" data-wd-type="organization" <?php echo $hidden_unless(['organization']); ?>>
         <p class="wd-panel__label"><?php esc_html_e('Organization types', 'wicket-directory'); ?></p>
         <?php if ($args['org_types'] !== []) : ?>
             <?php
@@ -71,7 +137,7 @@ $chip_picker = static function (array $args): void {
         <p class="wd-help"><?php esc_html_e('List only organizations of these types. Leave empty to list every type.', 'wicket-directory'); ?></p>
     </div>
 
-    <div class="wd-panel">
+    <div class="wd-panel" data-wd-type="<?php echo esc_attr($member_types); ?>" <?php echo $hidden_unless(['individual', 'organization']); ?>>
         <p class="wd-panel__label"><?php esc_html_e('Membership tiers', 'wicket-directory'); ?></p>
         <div data-wd-type-unchanged>
             <?php if ($args['tiers_failed']) : ?>
@@ -96,7 +162,7 @@ $chip_picker = static function (array $args): void {
         <p class="wd-help" data-wd-type-changed hidden><?php esc_html_e('Save the directory to choose membership tiers for the new type.', 'wicket-directory'); ?></p>
     </div>
 
-    <div class="wd-panel">
+    <div class="wd-panel" data-wd-type="<?php echo esc_attr($member_types); ?>" <?php echo $hidden_unless(['individual', 'organization']); ?>>
         <p class="wd-panel__label"><?php esc_html_e('Membership', 'wicket-directory'); ?></p>
         <input type="hidden" name="<?php echo esc_attr($field); ?>[eligibility][require_active_membership]" value="0">
         <label class="wd-check">
@@ -105,7 +171,7 @@ $chip_picker = static function (array $args): void {
         </label>
     </div>
 
-    <fieldset class="wd-panel">
+    <fieldset class="wd-panel" data-wd-type="<?php echo esc_attr($member_types); ?>" <?php echo $hidden_unless(['individual', 'organization']); ?>>
         <legend class="wd-panel__label"><?php esc_html_e('Opt-in data field', 'wicket-directory'); ?></legend>
         <div class="wd-inline-fields">
             <p>

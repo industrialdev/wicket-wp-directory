@@ -46,7 +46,7 @@ foreach ($args['config']->facets as $facet) {
     $key = Wicket\Directory\Query\RequestParams::facet_key($facet);
     $options = $args['facet_options'][$key] ?? [];
 
-    // Not an enum, gone from the schema, or no eligible org types: nothing to pick.
+    // Not an enum, gone from the schema, or no eligible org or group types: nothing to pick.
     if ($options === []) {
         continue;
     }
@@ -54,9 +54,11 @@ foreach ($args['config']->facets as $facet) {
     $label = $facet['label'];
 
     if ($label === '') {
-        $label = $facet['source'] === Wicket\Directory\Config\DirectoryConfig::FACET_ORG_TYPE
-            ? __('Organization type', 'wicket-directory')
-            : $facet['field'];
+        $label = match ($facet['source']) {
+            Wicket\Directory\Config\DirectoryConfig::FACET_ORG_TYPE   => __('Organization type', 'wicket-directory'),
+            Wicket\Directory\Config\DirectoryConfig::FACET_GROUP_TYPE => __('Group type', 'wicket-directory'),
+            default                                                     => $facet['field'],
+        };
     }
 
     $selected = $params->facet_values($facet);

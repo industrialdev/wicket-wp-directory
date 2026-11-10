@@ -159,6 +159,9 @@ export default function Edit( { attributes, setAttributes } ) {
 		? defaultSort
 		: sortOptions[ 0 ]?.value;
 
+	// Group directories have no location search (DirectoryType::has_location()).
+	const hasLocation = selected?.type !== 'group';
+
 	// Sort tokens are per type, so a new directory starts on its type's default.
 	const selectDirectory = ( id ) =>
 		setAttributes( { directoryId: id, defaultSort: '' } );
@@ -254,17 +257,19 @@ export default function Edit( { attributes, setAttributes } ) {
 							setAttributes( { hideKeyword: value } )
 						}
 					/>
-					<ToggleControl
-						__nextHasNoMarginBottom
-						label={ __(
-							'Hide Location Search',
-							'wicket-directory'
-						) }
-						checked={ hideLocation }
-						onChange={ ( value ) =>
-							setAttributes( { hideLocation: value } )
-						}
-					/>
+					{ hasLocation && (
+						<ToggleControl
+							__nextHasNoMarginBottom
+							label={ __(
+								'Hide Location Search',
+								'wicket-directory'
+							) }
+							checked={ hideLocation }
+							onChange={ ( value ) =>
+								setAttributes( { hideLocation: value } )
+							}
+						/>
+					) }
 					<ToggleControl
 						__nextHasNoMarginBottom
 						label={ __( 'Hide Filters', 'wicket-directory' ) }

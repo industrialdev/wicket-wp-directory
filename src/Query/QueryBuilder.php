@@ -9,7 +9,7 @@ use Wicket\Directory\Config\DirectoryConfig;
 use Wicket\Directory\Config\DirectoryType;
 
 /**
- * Builds the Ransack payload for one directory type's `{people|organizations}/query`.
+ * Builds the Ransack payload for one directory type's `{people|organizations|groups}/query`.
  *
  * Holds what both builders share: the location group, data-field conditions,
  * sort whitelisting, paging, includes and the query_args filters.
@@ -23,7 +23,7 @@ use Wicket\Directory\Config\DirectoryType;
 abstract class QueryBuilder
 {
     /**
-     * Contact records every card may need.
+     * Contact records every person and organization card may need.
      */
     public const INCLUDE = 'emails,phones,addresses,web_addresses';
 
@@ -81,7 +81,7 @@ abstract class QueryBuilder
                 'number' => max(1, $params->page),
             ],
             'sort'    => $this->sort_key($config->type->sanitize_sort($params->sort), $lang),
-            'include' => self::INCLUDE,
+            'include' => $this->includes(),
         ];
 
         if ($filter === null) {
@@ -104,6 +104,17 @@ abstract class QueryBuilder
      * @return string
      */
     abstract protected function endpoint(): string;
+
+    /**
+     * The related records to include, for the query string.
+     *
+     * @return string Comma-separated relationships; '' for none (DirectoryQuery::path() then
+     *                leaves `include` out).
+     */
+    protected function includes(): string
+    {
+        return self::INCLUDE;
+    }
 
     /**
      * The Ransack filter: eligibility, keyword, location and facets.

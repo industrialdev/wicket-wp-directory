@@ -10,6 +10,7 @@ use Throwable;
 use Wicket\Directory\Config\DirectoryConfig;
 use Wicket\Directory\Config\DirectoryType;
 use Wicket\Directory\Query\DirectoryQuery;
+use Wicket\Directory\Query\GroupQueryBuilder;
 use Wicket\Directory\Query\OrganizationQueryBuilder;
 use Wicket\Directory\Query\PersonQueryBuilder;
 use Wicket\Directory\Query\RequestParams;
@@ -20,7 +21,7 @@ use WP_Post;
  *
  * - Picks the query builder from the directory type and sends the query with
  *   wicket_api_client().
- * - Caches each page (with its tier labels) in a transient. The TTL defaults
+ * - Caches each page (with its tier labels or group member counts) in a transient. The TTL defaults
  *   to CACHE_TTL and can be changed with the wicket_directory/cache_ttl filter.
  * - Never throws and never prints: an API failure is logged and returned as an
  *   empty page flagged `unavailable`. Failures aren't cached.
@@ -55,6 +56,13 @@ final class DirectoryRepository
      * often hold several active memberships, so ask for the maximum.
      */
     public const TIER_PAGE_SIZE = 2000;
+
+    /**
+     * Page size of the group member count batch: the MDP's cap. A page of
+     * groups with more active member rows than this falls back to the groups'
+     * own `active_member_count`.
+     */
+    public const MEMBER_COUNT_PAGE_SIZE = 2000;
 
     /**
      * Returns the API client.
@@ -144,20 +152,22 @@ final class DirectoryRepository
         $page = ResultPage::from_response($response, $requested, $page_size);
         $cacheable = true;
 
-        if ($config->card['membership_tier'] === true && !$page->is_empty()) {
+        if (($config->card['membership_tier'] ?? false) === true && !$page->is_empty()) {
             try {
-                $page = new ResultPage(
-                    $page->items,
-                    $page->included,
-                    $page->total,
-                    $page->page,
-                    $page->total_pages,
-                    $page->per_page,
-                    $this->tiers($client, $config, $page->items, $lang),
-                );
+                $page = $page->with_tiers($this->tiers($client, $config, $page->items, $lang));
             } catch (Throwable $e) {
                 // Show the results without tiers, but don't cache them, so the next visit retries.
                 $this->log_error($directory, 'Directory tier lookup failed: ' . $e->getMessage());
+                $cacheable = false;
+            }
+        }
+
+        if ($config->type === DirectoryType::Group && ($config->card['member_count'] ?? false) === true && !$page->is_empty()) {
+            try {
+                $page = $page->with_member_counts($this->member_counts($client, $page->items));
+            } catch (Throwable $e) {
+                // The cards fall back to active_member_count; don't cache, so the next visit retries.
+                $this->log_error($directory, 'Directory group member count failed: ' . $e->getMessage());
                 $cacheable = false;
             }
         }
@@ -170,17 +180,58 @@ final class DirectoryRepository
     }
 
     /**
+     * One group a group directory can list, by UUID.
+     *
+     * The lookup sends every eligibility key with the UUID (see
+     * GroupQueryBuilder::lookup()), so a group that is inactive, excluded or
+     * of another type is never found, however the visitor got its UUID. Use it
+     * for anything that reaches a group outside the listing, e.g. a roster link.
+     * Not cached: it's one small request, and a stale hit could show a group
+     * that was just excluded.
+     *
+     * @param WP_Post         $directory The directory post, for the log.
+     * @param DirectoryConfig $config    The directory's config.
+     * @param string          $uuid      The group's UUID, untrusted.
+     *
+     * @return array<string, mixed>|null The `groups` resource; null when the directory can't list it,
+     *                                   the UUID is invalid or the API failed (logged).
+     */
+    public function group(WP_Post $directory, DirectoryConfig $config, string $uuid): ?array
+    {
+        $query = (new GroupQueryBuilder())->lookup($config, $uuid);
+
+        if ($query->matches_nothing) {
+            return null;
+        }
+
+        try {
+            $response = $this->query($this->client(), $query);
+        } catch (Throwable $e) {
+            $this->log_error($directory, 'Directory group lookup failed: ' . $e->getMessage());
+
+            return null;
+        }
+
+        $group = $response['data'][0] ?? null;
+        $id = is_array($group) ? ($group['id'] ?? null) : null;
+
+        // Only the group that was asked for; never trust a looser match.
+        return is_string($id) && strtolower($id) === strtolower(trim($uuid)) ? $group : null;
+    }
+
+    /**
      * The query builder for a directory type.
      *
      * @param DirectoryType $type Directory type.
      *
-     * @return PersonQueryBuilder|OrganizationQueryBuilder
+     * @return PersonQueryBuilder|OrganizationQueryBuilder|GroupQueryBuilder
      */
-    private function builder(DirectoryType $type): PersonQueryBuilder|OrganizationQueryBuilder
+    private function builder(DirectoryType $type): PersonQueryBuilder|OrganizationQueryBuilder|GroupQueryBuilder
     {
         return match ($type) {
             DirectoryType::Individual   => new PersonQueryBuilder(),
             DirectoryType::Organization => new OrganizationQueryBuilder(),
+            DirectoryType::Group        => new GroupQueryBuilder(),
         };
     }
 
@@ -295,6 +346,65 @@ final class DirectoryRepository
         }
 
         return array_map('array_values', $tiers);
+    }
+
+    /**
+     * Distinct active members per group on a page: one batch request.
+     *
+     * The groups' `active_member_count` counts active member rows, so a person
+     * with two overlapping active terms counts twice and the card would
+     * disagree with the roster total. This asks `group_members/query` for the
+     * page's active rows and counts distinct people per group (api-queries.md,
+     * "Active member count").
+     *
+     * @param object                     $client API client.
+     * @param list<array<string, mixed>> $items  The page's `groups` resources.
+     *
+     * @throws RuntimeException When the response isn't a JSON:API list.
+     *
+     * @return array<string, int> Group UUID => distinct active members, for every group on the page.
+     *                            Empty when the rows don't fit in one request; the cards then
+     *                            use `active_member_count`.
+     */
+    private function member_counts(object $client, array $items): array
+    {
+        $ids = array_values(array_unique(array_filter(
+            array_map(static fn (array $item): string => is_string($item['id'] ?? null) ? $item['id'] : '', $items),
+            static fn (string $id): bool => $id !== ''
+        )));
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $query_string = http_build_query(['page' => ['size' => self::MEMBER_COUNT_PAGE_SIZE]]);
+
+        $response = $client->post('group_members/query?' . $query_string, ['json' => ['filter' => [
+            'group_uuid_in' => $ids,
+            'active_eq'     => true,
+        ]]]);
+
+        if (!is_array($response) || !is_array($response['data'] ?? null)) {
+            throw new RuntimeException('Unexpected response from group_members/query.');
+        }
+
+        // Paging through the rest would cost more requests; the attribute is close enough.
+        if (self::int($response['meta']['page']['total_items'] ?? null) > count($response['data'])) {
+            return [];
+        }
+
+        $people = array_fill_keys($ids, []);
+
+        foreach ($response['data'] as $row) {
+            $group = is_array($row) ? ($row['relationships']['group']['data']['id'] ?? null) : null;
+            $person = is_array($row) ? ($row['relationships']['person']['data']['id'] ?? null) : null;
+
+            if (is_string($group) && isset($people[$group]) && is_string($person) && $person !== '') {
+                $people[$group][$person] = true;
+            }
+        }
+
+        return array_map('count', $people);
     }
 
     /**

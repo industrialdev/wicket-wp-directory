@@ -21,7 +21,7 @@ use WP_Post;
  * @phpstan-type DataFieldRef array{schema_key: string, field: string}
  * @phpstan-type ContactRule array{show: bool, type: string, only_directory: bool, only_primary: bool}
  * @phpstan-type OptIn array{schema_key: string, field: string, value: string|bool}
- * @phpstan-type Eligibility array{require_active_membership: bool, membership_ids: list<string>, org_types: list<string>, opt_in: OptIn|null}
+ * @phpstan-type Eligibility array{require_active_membership: bool, membership_ids: list<string>, org_types: list<string>, opt_in: OptIn|null, group_status: string, group_types: list<string>, excluded_groups: list<string>}
  * @phpstan-type Facet array{source: string, schema_key: string, field: string, label: string}
  */
 final class DirectoryConfig
@@ -50,6 +50,31 @@ final class DirectoryConfig
      * Facet over organization types (organization directories only).
      */
     public const FACET_ORG_TYPE = 'org_type';
+
+    /**
+     * Facet over group types (group directories only).
+     */
+    public const FACET_GROUP_TYPE = 'group_type';
+
+    /**
+     * Group Status: list active groups only (the default).
+     */
+    public const GROUP_STATUS_ACTIVE = 'active';
+
+    /**
+     * Group Status: list inactive groups only.
+     */
+    public const GROUP_STATUS_INACTIVE = 'inactive';
+
+    /**
+     * Group Status: list groups whatever their status.
+     */
+    public const GROUP_STATUS_ALL = 'all';
+
+    /**
+     * Allowed values of eligibility.group_status.
+     */
+    public const GROUP_STATUSES = [self::GROUP_STATUS_ACTIVE, self::GROUP_STATUS_INACTIVE, self::GROUP_STATUS_ALL];
 
     /**
      * Use defaults(), from_post() or sanitize().
@@ -113,6 +138,8 @@ final class DirectoryConfig
      * - a type change resets the card, the facets and the membership tiers to
      *   the new type's defaults (tiers are typed, so old ones would be invisible
      *   in the admin yet still filter the directory);
+     * - eligibility keys that don't apply to the type are always reset (see
+     *   sanitize_eligibility()), with or without $previous;
      * - cache_version is the previous one plus one.
      *
      * Without $previous the result depends only on $input, so sanitize() is
@@ -169,7 +196,11 @@ final class DirectoryConfig
     }
 
     /**
-     * Default eligibility: active members only, no other conditions.
+     * Default eligibility: active members (or, for groups, active groups) only,
+     * no other conditions.
+     *
+     * Every type stores every key, so the shape never depends on the type.
+     * Keys that don't apply to a type keep these defaults.
      *
      * @return Eligibility
      */
@@ -180,13 +211,18 @@ final class DirectoryConfig
             'membership_ids'            => [],
             'org_types'                 => [],
             'opt_in'                    => null,
+            'group_status'              => self::GROUP_STATUS_ACTIVE,
+            'group_types'               => [],
+            'excluded_groups'           => [],
         ];
     }
 
     /**
      * Default card for a directory type.
      *
-     * Personal contact details are off by default for individuals.
+     * Personal contact details are off by default for individuals. Groups
+     * have no contact records, member ID, tiers or data fields, so their card
+     * has only its own toggles.
      *
      * @param DirectoryType $type Directory type.
      *
@@ -225,6 +261,12 @@ final class DirectoryConfig
                 'phone'       => self::contact_rule(true),
                 'website'     => self::contact_rule(true),
             ] + $shared,
+            DirectoryType::Group => [
+                'status'       => true,
+                'group_type'   => true,
+                'description'  => true,
+                'member_count' => true,
+            ],
         };
     }
 
@@ -256,6 +298,12 @@ final class DirectoryConfig
     }
 
     /**
+     * Sanitize eligibility for a type.
+     *
+     * Keys that don't apply to the type get their defaults, so a group
+     * directory never carries tiers or an opt-in, and a person or organization
+     * directory never carries group conditions.
+     *
      * @param array<mixed>  $input Raw eligibility.
      * @param DirectoryType $type  Directory type.
      *
@@ -264,12 +312,17 @@ final class DirectoryConfig
     private static function sanitize_eligibility(array $input, DirectoryType $type): array
     {
         $defaults = self::eligibility_defaults();
+        $is_group = $type === DirectoryType::Group;
+        $group_status = $input['group_status'] ?? null;
 
         return [
             'require_active_membership' => self::bool($input['require_active_membership'] ?? null, $defaults['require_active_membership']),
-            'membership_ids'            => self::uuid_list($input['membership_ids'] ?? null),
+            'membership_ids'            => $is_group ? [] : self::uuid_list($input['membership_ids'] ?? null),
             'org_types'                 => $type === DirectoryType::Organization ? self::identifier_list($input['org_types'] ?? null) : [],
-            'opt_in'                    => self::sanitize_opt_in($input['opt_in'] ?? null),
+            'opt_in'                    => $is_group ? null : self::sanitize_opt_in($input['opt_in'] ?? null),
+            'group_status'              => $is_group && in_array($group_status, self::GROUP_STATUSES, true) ? $group_status : $defaults['group_status'],
+            'group_types'               => $is_group ? self::identifier_list($input['group_types'] ?? null) : [],
+            'excluded_groups'           => $is_group ? self::uuid_list($input['excluded_groups'] ?? null) : [],
         ];
     }
 
@@ -382,6 +435,9 @@ final class DirectoryConfig
     /**
      * Sanitize the facet list: drop invalid and duplicate facets, keep order.
      *
+     * The org-type facet is for organization directories and the group-type
+     * facet for group directories; data-field facets are for the other two.
+     *
      * @param mixed         $value Raw facets.
      * @param DirectoryType $type  Directory type.
      *
@@ -402,9 +458,13 @@ final class DirectoryConfig
 
             $source = $facet['source'] ?? null;
 
-            if ($source === self::FACET_ORG_TYPE && $type === DirectoryType::Organization) {
+            if (
+                ($source === self::FACET_ORG_TYPE && $type === DirectoryType::Organization)
+                || ($source === self::FACET_GROUP_TYPE && $type === DirectoryType::Group)
+            ) {
                 $ref = self::empty_ref();
-            } elseif ($source === self::FACET_DATA_FIELD) {
+            } elseif ($source === self::FACET_DATA_FIELD && $type !== DirectoryType::Group) {
+                // No JSON schema is bound to groups, so a group directory has no data-field facets.
                 $ref = self::sanitize_data_field_ref($facet);
 
                 if ($ref['schema_key'] === '') {

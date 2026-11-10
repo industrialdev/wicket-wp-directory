@@ -3,7 +3,8 @@
  * The search row: [keyword] [location] [Search].
  *
  * Keyword search is the base `search-form` component as-is, so its Search
- * button submits the directory form. The location field sits next to it with
+ * button submits the directory form. A type with no location (groups) has no
+ * location field. The location field sits next to it with
  * the same `component-search-form` classes; `directory.css` unwraps
  * `search-form` so the row reads [keyword] [location] [Search]. With keyword
  * search hidden, a `button` component is the Search button. With both hidden
@@ -25,7 +26,9 @@ defined('ABSPATH') || exit;
 $attributes = $args['attributes'];
 $params = $args['params'];
 
-if ($attributes->hide_keyword && $attributes->hide_location) {
+$show_location = !$attributes->hide_location && $args['config']->type->has_location();
+
+if ($attributes->hide_keyword && !$show_location) {
     return;
 }
 
@@ -34,6 +37,7 @@ $location_param = $params->param('location');
 $keyword_placeholder = match ($args['config']->type) {
     Wicket\Directory\Config\DirectoryType::Individual   => __('Search by name, member ID', 'wicket-directory'),
     Wicket\Directory\Config\DirectoryType::Organization => __('Search by organization', 'wicket-directory'),
+    Wicket\Directory\Config\DirectoryType::Group        => __('Search by group name', 'wicket-directory'),
 };
 $keyword_search = '';
 
@@ -66,7 +70,7 @@ if (!$attributes->hide_keyword) {
 		</div>
 	<?php endif; ?>
 
-	<?php if (!$attributes->hide_location) : ?>
+	<?php if ($show_location) : ?>
 		<div class="wicket-directory__location component-search-form form">
 			<?php get_component('icon', [
 			    'icon'    => 'fa-solid fa-location-dot',

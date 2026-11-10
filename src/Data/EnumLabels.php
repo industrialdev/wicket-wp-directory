@@ -9,12 +9,13 @@ use Throwable;
 use Wicket\Directory\Api\DirectoryRepository;
 
 /**
- * Display labels for data-field enum keys and organization type slugs.
+ * Display labels for data-field enum keys, organization type slugs and group
+ * type slugs.
  *
  * Each source is loaded at most once per instance, and only when a label is
  * first asked for. EntryMapper and FacetOptions use the shared() instance, so
  * every directory on a page shares one `json_schemas` request and one
- * `resource_types` request.
+ * `resource_types` request per source.
  *
  * The shared() instance also keeps the resolved label maps in one transient
  * per language (LABELS_CACHE_TTL, changed with the
@@ -56,6 +57,20 @@ final class EnumLabels
     private Closure $org_types_loader;
 
     /**
+     * Returns the `GET resource_types` response.
+     *
+     * @var Closure(): mixed
+     */
+    private Closure $resource_types_loader;
+
+    /**
+     * Resource-type attributes grouped by their `resource_type`; null until loaded.
+     *
+     * @var array<string, list<array<string, mixed>>>|null
+     */
+    private ?array $resource_types = null;
+
+    /**
      * Schema resources keyed by schema key; null until loaded.
      *
      * @var array<string, array<string, mixed>>|null
@@ -70,7 +85,8 @@ final class EnumLabels
     private ?array $org_types = null;
 
     /**
-     * Resolved label maps, keyed by "lang|schema_key|field" or "lang|org_types".
+     * Resolved label maps, keyed by "lang|schema_key|field", "lang|org_types" or
+     * "lang|resource_types:{resource_type}".
      *
      * @var array<string, array<string, string>>
      */
@@ -83,7 +99,8 @@ final class EnumLabels
 
     /**
      * Label maps read from each language's transient, keyed by language, then
-     * by "schema_key|field" or "org_types". A language is missing until read.
+     * by "schema_key|field", "org_types" or "resource_types:{resource_type}".
+     * A language is missing until read.
      *
      * @var array<string, array<string, array<string, string>>>
      */
@@ -103,9 +120,15 @@ final class EnumLabels
      *                                             resources). Defaults to wicket_get_org_types_list().
      * @param bool                     $persistent Keep label maps in a transient per language.
      *                                             shared() turns this on.
+     * @param (callable(): mixed)|null $resource_types Returns `GET resource_types` (`['data' => [...]]`).
+     *                                                 Defaults to wicket_get_resource_types(). Tests
+     *                                                 pass a fake.
      */
-    public function __construct(?callable $schemas = null, ?callable $org_types = null, bool $persistent = false)
+    public function __construct(?callable $schemas = null, ?callable $org_types = null, bool $persistent = false, ?callable $resource_types = null)
     {
+        $this->resource_types_loader = $resource_types !== null
+            ? Closure::fromCallable($resource_types)
+            : static fn (): mixed => wicket_get_resource_types();
         $this->schemas_loader = $schemas !== null
             ? Closure::fromCallable($schemas)
             : static fn (): mixed => wicket_get_schemas();
@@ -257,12 +280,86 @@ final class EnumLabels
     }
 
     /**
+     * Labels for group type slugs (`groups.type`, the `resource_type_slug_in` values).
+     *
+     * @param string $lang Two-letter language code.
+     *
+     * @return array<string, string> Slug => `name_{lang}`, else `name`, else `name_en`, else the slug,
+     *                               in API order.
+     */
+    public function group_types(string $lang): array
+    {
+        return $this->resource_type_labels('groups', $lang);
+    }
+
+    /**
+     * Labels for one list of `GET resource_types`.
+     *
+     * @param string $resource_type The list's `resource_type`, e.g. `groups`.
+     * @param string $lang          Two-letter language code.
+     *
+     * @return array<string, string> Slug => label.
+     */
+    private function resource_type_labels(string $resource_type, string $lang): array
+    {
+        $stored_key = 'resource_types:' . $resource_type;
+        $cache_key = $lang . '|' . $stored_key;
+
+        if (isset($this->maps[$cache_key])) {
+            return $this->maps[$cache_key];
+        }
+
+        $stored = $this->stored($lang, $stored_key);
+
+        if ($stored !== null) {
+            return $this->maps[$cache_key] = $stored;
+        }
+
+        if ($this->resource_types === null) {
+            $loaded = $this->load($this->resource_types_loader, 'resource types');
+            $this->resource_types = [];
+
+            foreach (is_array($loaded) && is_array($loaded['data'] ?? null) ? $loaded['data'] : [] as $record) {
+                $attributes = is_array($record) && is_array($record['attributes'] ?? null) ? $record['attributes'] : null;
+                $group = $attributes['resource_type'] ?? null;
+
+                if (is_string($group) && $group !== '') {
+                    $this->resource_types[$group][] = $attributes;
+                }
+            }
+        }
+
+        $map = [];
+
+        foreach ($this->resource_types[$resource_type] ?? [] as $attributes) {
+            $slug = $attributes['slug'] ?? null;
+
+            if (!is_string($slug) || $slug === '') {
+                continue;
+            }
+
+            $map[$slug] ??= self::first_label([
+                $attributes['name_' . $lang] ?? null,
+                $attributes['name'] ?? null,
+                $attributes['name_en'] ?? null,
+            ]) ?? $slug;
+        }
+
+        // The helper gives false when the request fails, so nothing loaded isn't kept.
+        if ($this->resource_types !== []) {
+            $this->remember($lang, $stored_key, $map);
+        }
+
+        return $this->maps[$cache_key] = $map;
+    }
+
+    /**
      * A label map from the language's transient.
      *
      * The transient is read once per language, on first use.
      *
      * @param string $lang Two-letter language code.
-     * @param string $key  "schema_key|field" or "org_types".
+     * @param string $key  "schema_key|field", "org_types" or "resource_types:{resource_type}".
      *
      * @return array<string, string>|null Null when not persistent, not stored or malformed.
      */
@@ -293,7 +390,7 @@ final class EnumLabels
      * transient are kept.
      *
      * @param string                $lang Two-letter language code.
-     * @param string                $key  "schema_key|field" or "org_types".
+     * @param string                $key  "schema_key|field", "org_types" or "resource_types:{resource_type}".
      * @param array<string, string> $map  Label map.
      *
      * @return void
@@ -319,8 +416,9 @@ final class EnumLabels
     {
         if (!isset($this->ttls[$lang])) {
             /**
-             * Change how long data-field enum labels and organization type
-             * labels are cached. Facet options and card labels share them.
+             * Change how long data-field enum labels, organization type labels
+             * and group type labels are cached. Facet options and card labels
+             * share them.
              *
              * Return 0 to disable the cache (e.g. right after editing a schema).
              *

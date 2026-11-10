@@ -79,6 +79,8 @@ final class SchemaFields
     /**
      * The schemas and fields a directory of this type can pick from.
      *
+     * Group directories have none.
+     *
      * Labels are the ui_schema's `ui:i18n` title or label in $lang, else in
      * English, else the JSON schema's `title`, else the key.
      *
@@ -90,6 +92,11 @@ final class SchemaFields
      */
     public function for_type(DirectoryType $type, string $lang): array
     {
+        // No JSON schema is bound to groups (api-queries.md), so don't load or offer any.
+        if ($type === DirectoryType::Group) {
+            return [];
+        }
+
         $response = $this->response();
         $scope = $type === DirectoryType::Individual ? 'people' : 'organizations';
         $scopes = self::scopes($response['included'] ?? null);

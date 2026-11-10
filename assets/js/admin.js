@@ -4,7 +4,8 @@
  * The type select lives in the Directory panels (`data-saved-type`); the
  * elements it toggles can be anywhere in the settings box:
  *
- * - `[data-wd-type="…"]` shows only for that type.
+ * - `[data-wd-type="…"]` shows only for that type, or those types when it
+ *   lists several separated by spaces.
  * - `[data-wd-type-changed]` shows only while the selected type differs from
  *   the saved one; `[data-wd-type-unchanged]` only while it matches.
  *
@@ -30,7 +31,10 @@
 	const update = () => {
 		const type = select ? select.value : savedType;
 
-		toggle( '[data-wd-type]', ( el ) => el.dataset.wdType !== type );
+		toggle(
+			'[data-wd-type]',
+			( el ) => ! el.dataset.wdType.split( ' ' ).includes( type )
+		);
 		toggle( '[data-wd-type-changed]', () => type === savedType );
 		toggle( '[data-wd-type-unchanged]', () => type !== savedType );
 	};

@@ -16,7 +16,9 @@ use Wicket\Directory\Query\RequestParams;
  * - a data-field facet offers the field's schema enum, labelled through
  *   EnumLabels (`ui:i18n` in the visitor's language first);
  * - the org-type facet offers the organization resource types, narrowed to
- *   `eligibility.org_types` when that is set.
+ *   `eligibility.org_types` when that is set;
+ * - the group-type facet offers the group resource types, narrowed to
+ *   `eligibility.group_types` when that is set.
  *
  * Labels come from EnumLabels, so the facets and the cards share its
  * per-language transient.
@@ -68,7 +70,7 @@ final class FacetOptions
      * The choices for one facet.
      *
      * @param Facet           $facet  A facet from DirectoryConfig::$facets.
-     * @param DirectoryConfig $config The directory's config (type and eligible org types).
+     * @param DirectoryConfig $config The directory's config (type and eligible org or group types).
      * @param string|null     $lang   Two-letter language code. Defaults to wicket_get_current_language().
      *
      * @return list<FacetOption>
@@ -82,6 +84,13 @@ final class FacetOptions
             $eligible = $config->eligibility['org_types'];
 
             // Offer only org types the directory can list; the query builder intersects the same way.
+            if ($eligible !== []) {
+                $labels = array_intersect_key($labels, array_flip($eligible));
+            }
+        } elseif ($facet['source'] === DirectoryConfig::FACET_GROUP_TYPE) {
+            $labels = $config->type === DirectoryType::Group ? $this->labels->group_types($lang) : [];
+            $eligible = $config->eligibility['group_types'];
+
             if ($eligible !== []) {
                 $labels = array_intersect_key($labels, array_flip($eligible));
             }
