@@ -11,9 +11,11 @@ namespace Wicket\Directory\Data;
  * own name format can use them instead. Parts the card config turns off are
  * empty.
  *
+ * GroupMemberEntry extends it with a member's role, status and term in a group.
+ *
  * @phpstan-import-type Phone from Entry
  */
-final class PersonEntry extends Entry
+class PersonEntry extends Entry
 {
     /**
      * @param string                  $id           Person UUID.

@@ -79,16 +79,19 @@ final class EntryMapper
     /**
      * Map a page of a group's member list.
      *
-     * Members are people, so they map to PersonEntry with the directory's
-     * member card (DirectoryConfig::member_card()). The entry filters get the
-     * group directory's config, as for its group cards.
+     * Members are people with a row in the group, so they map to
+     * GroupMemberEntry with the directory's Group Member card
+     * (DirectoryConfig::$member_card): the person's fields as on an individual
+     * card, plus the role, in-group status and term from the page's
+     * `group_members` rows. The entry filters get the group directory's
+     * config, as for its group cards.
      *
      * @param ResultPage      $page   A page from DirectoryRepository::fetch_roster().
      * @param DirectoryConfig $config The group directory's config.
      * @param string          $slug   The directory post's slug, for the entry_{slug} filter.
      * @param string|null     $lang   Two-letter language code. Defaults to wicket_get_current_language().
      *
-     * @return list<PersonEntry> One entry per person, in order.
+     * @return list<GroupMemberEntry> One entry per person, in order.
      */
     public function map_members(ResultPage $page, DirectoryConfig $config, string $slug = '', ?string $lang = null): array
     {
@@ -98,11 +101,10 @@ final class EntryMapper
 
         $lang = QueryBuilder::language($lang ?? wicket_get_current_language());
         $response = new ResponseHelper(['data' => $page->items, 'included' => $page->included]);
-        $card = $config->member_card();
         $entries = [];
 
         foreach ($page->items as $item) {
-            $entries[] = $this->apply_filters($this->person($item, $response, $page, $card, $lang), $item, $config, $slug);
+            $entries[] = $this->apply_filters($this->member($item, $response, $page, $config->member_card, $lang), $item, $config, $slug);
         }
 
         return $entries;
@@ -159,6 +161,63 @@ final class EntryMapper
      */
     private function person(array $item, ResponseHelper $response, ResultPage $page, array $card, string $lang): PersonEntry
     {
+        return new PersonEntry(...$this->person_values($item, $response, $page, $card, $lang));
+    }
+
+    /**
+     * Build a group member's entry: the person, plus their row in the group.
+     *
+     * Each group field is empty when the card hides it or the page has no row
+     * for the person. An open-ended term's end date is END_PRESENT.
+     *
+     * @param array<string, mixed> $item     `people` resource.
+     * @param ResponseHelper       $response The page, for included records.
+     * @param ResultPage           $page     The page, for tiers and group member rows.
+     * @param array<string, mixed> $card     The Group Member card's toggles.
+     * @param string               $lang     Language code.
+     *
+     * @return GroupMemberEntry
+     */
+    private function member(array $item, ResponseHelper $response, ResultPage $page, array $card, string $lang): GroupMemberEntry
+    {
+        $values = $this->person_values($item, $response, $page, $card, $lang);
+        $row = $page->group_member_for($values['id']);
+
+        $role = $card['role'] && $row !== null ? self::text($row['role'] ?? null) : '';
+        $status = '';
+        $end_date = '';
+
+        if ($card['status'] && is_bool($row['active'] ?? null)) {
+            $status = $row['active'] ? GroupMemberEntry::STATUS_ACTIVE : GroupMemberEntry::STATUS_INACTIVE;
+        }
+
+        if ($card['end_date'] && $row !== null) {
+            $end_date = ($row['end_date'] ?? null) === null ? GroupMemberEntry::END_PRESENT : self::date($row['end_date']);
+        }
+
+        return new GroupMemberEntry(
+            ...$values,
+            role: $role,
+            role_label: $role !== '' ? ($this->labels->group_member_roles($lang)[$role] ?? $role) : '',
+            status: $status,
+            start_date: $card['start_date'] && $row !== null ? self::date($row['start_date'] ?? null) : '',
+            end_date: $end_date,
+        );
+    }
+
+    /**
+     * A person's entry values, for PersonEntry and GroupMemberEntry.
+     *
+     * @param array<string, mixed> $item     `people` resource.
+     * @param ResponseHelper       $response The page, for included records.
+     * @param ResultPage           $page     The page, for tiers.
+     * @param array<string, mixed> $card     The card's toggles, in the individual card's shape.
+     * @param string               $lang     Language code.
+     *
+     * @return array<string, mixed> PersonEntry constructor arguments, keyed by name.
+     */
+    private function person_values(array $item, ResponseHelper $response, ResultPage $page, array $card, string $lang): array
+    {
         $attributes = self::attributes($item);
 
         $salutation = $card['salutation'] ? self::text($attributes['honorific_prefix'] ?? null) : '';
@@ -171,17 +230,16 @@ final class EntryMapper
             ? self::join(' ', [$salutation, $given_name, $middle_name, $family_name, $suffix])
             : self::text($attributes['full_name'] ?? null);
 
-        return new PersonEntry(
-            ...$this->shared_values($item, $attributes, $response, $page, $card, $lang, $card['profile_image']),
-            name: $name,
-            salutation: $salutation,
-            given_name: $given_name,
-            middle_name: $middle_name,
-            family_name: $family_name,
-            suffix: $suffix,
-            post_nominal: implode(', ', $this->data_field_labels($attributes, $card['post_nominal'], $lang)),
-            job_title: $card['job_title'] ? self::text($attributes['job_title'] ?? null) : '',
-        );
+        return $this->shared_values($item, $attributes, $response, $page, $card, $lang, $card['profile_image']) + [
+            'name'         => $name,
+            'salutation'   => $salutation,
+            'given_name'   => $given_name,
+            'middle_name'  => $middle_name,
+            'family_name'  => $family_name,
+            'suffix'       => $suffix,
+            'post_nominal' => implode(', ', $this->data_field_labels($attributes, $card['post_nominal'], $lang)),
+            'job_title'    => $card['job_title'] ? self::text($attributes['job_title'] ?? null) : '',
+        ];
     }
 
     /**
@@ -326,7 +384,7 @@ final class EntryMapper
      *
      * A filter that returns something other than an array is ignored.
      *
-     * @param PersonEntry|OrganizationEntry|GroupEntry $entry  The mapped entry.
+     * @param PersonEntry|OrganizationEntry|GroupEntry $entry  The mapped entry (a GroupMemberEntry is a PersonEntry).
      * @param array<string, mixed>                     $item   The raw API resource.
      * @param DirectoryConfig                          $config The directory's config.
      * @param string                                   $slug   The directory post's slug.
@@ -345,7 +403,7 @@ final class EntryMapper
          * template override. Unknown keys are dropped, and a value of the wrong
          * type keeps the original.
          *
-         * @param array           $data   PersonEntry, OrganizationEntry or GroupEntry::to_array().
+         * @param array           $data   PersonEntry, GroupMemberEntry, OrganizationEntry or GroupEntry::to_array().
          * @param array           $item   The raw `people` / `organizations` / `groups` resource,
          *                                with `attributes` (including `data_fields`).
          * @param DirectoryConfig $config The directory's config.
@@ -597,6 +655,22 @@ final class EntryMapper
         }
 
         return '';
+    }
+
+    /**
+     * The date part of an MDP date or date-time.
+     *
+     * @param mixed $value Raw value, e.g. `2020-01-01` or `2020-01-01T00:00:00.000-05:00`.
+     *
+     * @return string `Y-m-d`; '' when the value doesn't start with a valid date.
+     */
+    private static function date(mixed $value): string
+    {
+        if (!is_string($value) || preg_match('/^(\d{4})-(\d{2})-(\d{2})/', trim($value), $parts) !== 1) {
+            return '';
+        }
+
+        return checkdate((int) $parts[2], (int) $parts[3], (int) $parts[1]) ? $parts[0] : '';
     }
 
     /**

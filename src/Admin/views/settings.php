@@ -5,9 +5,11 @@
  *
  * The tab bar is `hidden` until `assets/js/admin.js` turns it on and hides the
  * inactive panels. Without the script every panel is shown, one after another.
+ * A group directory's card switch (`switch`) comes before the tabs.
  *
  * @var array{
  *     directory: callable(): void,
+ *     switch?: callable(): void,
  *     tabs: array<string, array{0: string, 1: callable(): void}>,
  * } $args
  */
@@ -18,6 +20,9 @@ defined('ABSPATH') || exit;
 ?>
 <div class="wicket-directory-admin">
     <?php ($args['directory'])(); ?>
+    <?php if (isset($args['switch'])) : ?>
+        <?php ($args['switch'])(); ?>
+    <?php endif; ?>
     <div class="wd-tabs" role="tablist" data-wd-tabs hidden>
         <?php foreach ($args['tabs'] as $key => [$label]) : ?>
             <button type="button" class="wd-tab" role="tab" id="wicket-directory-tab-<?php echo esc_attr($key); ?>" aria-controls="wicket-directory-panel-<?php echo esc_attr($key); ?>" data-wd-tab="<?php echo esc_attr($key); ?>"><?php echo esc_html($label); ?></button>

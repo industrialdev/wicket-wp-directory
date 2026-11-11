@@ -24,7 +24,10 @@ use Wicket\Directory\Config\DirectoryType;
  * - the keyword also matches role labels: the caller matches them in PHP
  *   (matching_roles()), and their slugs join the keyword's OR group as
  *   `group_members_resource_type_slug_in`;
- * - sort: person keys only; a sort on the join is an HTTP 500.
+ * - sort: person keys only; a sort on the join is an HTTP 500;
+ * - facets: the member list's own (DirectoryConfig::$member_facets), data
+ *   fields on the person, sent as `search_query` like an individual
+ *   directory's. A group directory has no opt-in.
  *
  * The directory's own eligibility (Group Status, types, exclude list) isn't
  * part of this query: the caller looks the group up through
@@ -107,7 +110,7 @@ final class RosterQueryBuilder extends QueryBuilder
      *
      * @throws LogicException When Group Member Status is Inactive and the active people weren't given.
      *
-     * @return array<string, mixed>|null Null when the group isn't a UUID.
+     * @return array<string, mixed>|null Null when the group isn't a UUID, or the conditions can't match.
      */
     protected function filter(DirectoryConfig $config, RequestParams $params, string $lang): ?array
     {
@@ -146,9 +149,29 @@ final class RosterQueryBuilder extends QueryBuilder
             $filter['g'] = $groups;
         }
 
-        // The member list's own facets come with the Group Member card (phase 2 ticket P2.4).
+        $search = $this->search_query($config, $params);
+
+        if ($search === null) {
+            return null;
+        }
+
+        if ($search !== []) {
+            $filter['search_query'] = $search;
+        }
 
         return $filter;
+    }
+
+    /**
+     * A member list's facets are its own.
+     *
+     * @param DirectoryConfig $config The group directory's config.
+     *
+     * @return list<array{source: string, schema_key: string, field: string, label: string}>
+     */
+    protected function facets(DirectoryConfig $config): array
+    {
+        return $config->member_facets;
     }
 
     /**

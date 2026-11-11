@@ -15,7 +15,11 @@ use WP_Post;
  * The settings meta box on the classic directory edit screen, and its save handler.
  *
  * One box holds the whole config: the Directory panels (type and eligibility)
- * on top, then the Card View and Filters tabs. Each part posts its sections of
+ * on top, then the Card View and Filters tabs. A group directory has two
+ * cards, each with its own facets: the Group card, and the Group Member card
+ * of its member lists. Both tabs hold both (`data-wd-card`); in the Group List
+ * + Member List view a switch above the tabs picks the one to set up, and the
+ * other views show only the card visitors can reach. Each part posts its sections of
  * the config under one field (`wicket_directory[...]`). The save handler lays
  * the posted sections over the stored config, so a section that wasn't posted
  * keeps its stored value, and runs the result through
@@ -45,7 +49,17 @@ final class DirectoryMetaBoxes
      * Config sections the box posts. Each one replaces the stored section as
      * a whole, so every field of a section must have a control.
      */
-    public const SECTIONS = ['type', 'eligibility', 'card', 'facets', 'roster'];
+    public const SECTIONS = ['type', 'eligibility', 'card', 'facets', 'member_card', 'member_facets', 'roster'];
+
+    /**
+     * `data-wd-card` of the group card's settings.
+     */
+    public const CARD_GROUP = 'group';
+
+    /**
+     * `data-wd-card` of the Group Member card's settings.
+     */
+    public const CARD_MEMBER = 'member';
 
     /**
      * Script handle for the edit screen.
@@ -138,6 +152,7 @@ final class DirectoryMetaBoxes
 
         $this->view('settings', [
             'directory' => fn () => $this->render_directory_box($post),
+            'switch'    => fn () => $this->render_card_switch($post),
             'tabs'      => [
                 'card'    => [__('Card View', 'wicket-directory'), fn () => $this->render_card_box($post)],
                 'filters' => [__('Filters', 'wicket-directory'), fn () => $this->render_filters_box($post)],
@@ -223,12 +238,43 @@ final class DirectoryMetaBoxes
     }
 
     /**
+     * Print the Group Card / Group Member Card switch, for a saved group directory.
+     *
+     * It shows only in the Group List + Member List view, the one with both
+     * cards; `assets/js/admin.js` then shows the chosen card's settings in the
+     * Card View and Filters tabs. It isn't part of the config: its radios
+     * aren't under `wicket_directory[...]`.
+     *
+     * @param WP_Post $post Directory being edited.
+     *
+     * @return void
+     */
+    public function render_card_switch(WP_Post $post): void
+    {
+        $config = DirectoryConfig::from_post($post) ?? DirectoryConfig::defaults();
+
+        if ($config->type !== DirectoryType::Group) {
+            return;
+        }
+
+        $this->view('card-switch', [
+            'view'  => $config->roster['default_view'],
+            'cards' => [
+                self::CARD_GROUP  => __('Group Card', 'wicket-directory'),
+                self::CARD_MEMBER => __('Group Member Card', 'wicket-directory'),
+            ],
+        ]);
+    }
+
+    /**
      * Print the Card View tab: what each card shows.
      *
      * Only the saved type's settings are shown, in card_groups() order. A type
      * change resets the card on save, so the tab asks the admin to save first.
      * As in the Directory panels, saved data fields and contact types the MDP
-     * no longer lists are still offered, selected.
+     * no longer lists are still offered, selected. A group directory gets the
+     * Group card and the Group Member card (member_card_groups() order), each
+     * in its own `data-wd-card` section.
      *
      * @param WP_Post $post Directory being edited.
      *
@@ -237,11 +283,110 @@ final class DirectoryMetaBoxes
     public function render_card_box(WP_Post $post): void
     {
         $config = DirectoryConfig::from_post($post) ?? DirectoryConfig::defaults();
-        $card = $config->card;
         $lang = (string) wicket_get_current_language();
-        $schemas = $this->schema_fields->for_type($config->type, $lang);
-        $fields = self::card_fields($config->type);
 
+        if ($config->type !== DirectoryType::Group) {
+            $this->view('card', $this->card_view_args($config, $config->card, $config->type, self::card_fields($config->type), self::card_groups($config->type), $lang));
+
+            return;
+        }
+
+        $this->card_sections($config, [
+            self::CARD_GROUP  => fn () => $this->view('card', [
+                'label' => __('Group card details', 'wicket-directory'),
+                'intro' => __('Choose what each group\'s card shows in the group list.', 'wicket-directory'),
+            ] + $this->card_view_args($config, $config->card, DirectoryType::Group, self::card_fields(DirectoryType::Group), self::card_groups(DirectoryType::Group), $lang)),
+            self::CARD_MEMBER => fn () => $this->view('card', [
+                'section'   => 'member_card',
+                'id_prefix' => 'wicket-directory-member-card-',
+                'label'     => __('Group Member card details', 'wicket-directory'),
+                'intro'     => __('Choose what each member\'s card shows in a group\'s member list. Contact details start off: the list is public.', 'wicket-directory'),
+            ] + $this->card_view_args($config, $config->member_card, DirectoryType::Individual, self::member_card_fields(), self::member_card_groups(), $lang)),
+        ]);
+    }
+
+    /**
+     * Print the Filters tab: the facets visitors refine results with.
+     *
+     * Rows are the configured facets, in order. The add picker offers every
+     * data field with an enum (a facet's choices come from it) and, for
+     * organization directories, the organization type. Group directories
+     * offer the group type only, and their member lists (a section of their
+     * own) every person data field with an enum. Adding, removing and
+     * reordering rows is `assets/js/admin.js`; without it, labels can still be
+     * edited. A saved facet the picker no longer offers stays, marked: the
+     * directory hides it from visitors until it has choices again.
+     *
+     * @param WP_Post $post Directory being edited.
+     *
+     * @return void
+     */
+    public function render_filters_box(WP_Post $post): void
+    {
+        $config = DirectoryConfig::from_post($post) ?? DirectoryConfig::defaults();
+        $lang = (string) wicket_get_current_language();
+
+        if ($config->type !== DirectoryType::Group) {
+            $this->view('filters', $this->filters_view_args($config->facets, $config->type, $lang));
+
+            return;
+        }
+
+        $this->card_sections($config, [
+            self::CARD_GROUP  => fn () => $this->view('filters', [
+                'label' => __('Group list filter facets', 'wicket-directory'),
+            ] + $this->filters_view_args($config->facets, DirectoryType::Group, $lang)),
+            self::CARD_MEMBER => fn () => $this->view('filters', [
+                'section'   => 'member_facets',
+                'id_prefix' => 'wicket-directory-member-facet',
+                'label'     => __('Member list filter facets', 'wicket-directory'),
+            ] + $this->filters_view_args($config->member_facets, DirectoryType::Individual, $lang)),
+        ]);
+    }
+
+    /**
+     * Print a group directory's two card sections, Group and Group Member.
+     *
+     * Each is wrapped in `data-wd-card`. A section whose card the saved
+     * Default View can't reach starts hidden; `assets/js/admin.js` keeps them
+     * in step with the Default View and the card switch. Both are always
+     * printed, and post, so switching views never loses settings.
+     *
+     * @param DirectoryConfig                 $config   The saved group directory's config.
+     * @param array<string, callable(): void> $sections CARD_GROUP and CARD_MEMBER => printer.
+     *
+     * @return void
+     */
+    private function card_sections(DirectoryConfig $config, array $sections): void
+    {
+        $hidden = match ($config->roster['default_view']) {
+            DirectoryConfig::VIEW_GROUPS  => self::CARD_MEMBER,
+            DirectoryConfig::VIEW_MEMBERS => self::CARD_GROUP,
+            default                       => '',
+        };
+
+        foreach ($sections as $card => $print) {
+            printf('<div class="wd-card-section" data-wd-card="%s"%s>', esc_attr($card), $card === $hidden ? ' hidden' : '');
+            $print();
+            echo '</div>';
+        }
+    }
+
+    /**
+     * The Card View view's args for one card.
+     *
+     * @param DirectoryConfig      $config      The saved config.
+     * @param array<string, mixed> $card        The card's saved toggles.
+     * @param DirectoryType        $schema_type Whose data fields and contact records the card shows.
+     * @param array{toggles: array<string, array{label: string, description: string}>, refs: array<string, array{label: string, description: string, kinds: list<string>}>, contacts: array<string, string>} $fields From card_fields().
+     * @param list<list<string>>   $groups      From card_groups().
+     * @param string               $lang        Two-letter language code.
+     *
+     * @return array<string, mixed>
+     */
+    private function card_view_args(DirectoryConfig $config, array $card, DirectoryType $schema_type, array $fields, array $groups, string $lang): array
+    {
+        $schemas = $this->schema_fields->for_type($schema_type, $lang);
         $tag_values = array_map(self::ref_value(...), $card['tag_chips'] ?? []);
         $refs = [];
 
@@ -268,10 +413,11 @@ final class DirectoryMetaBoxes
             ];
         }
 
-        $this->view('card', [
+        return [
             'field'                 => self::FIELD,
             'config'                => $config,
-            'groups'                => self::card_groups($config->type),
+            'card'                  => $card,
+            'groups'                => $groups,
             'toggles'               => $fields['toggles'],
             'refs'                  => $refs,
             'tag_chips'             => self::ref_choices($schemas, [SchemaFields::KIND_TEXT, SchemaFields::KIND_LIST], $tag_values),
@@ -284,30 +430,21 @@ final class DirectoryMetaBoxes
                 'city_province_country' => __('City, province/state, country', 'wicket-directory'),
                 'city_province'         => __('City, province/state', 'wicket-directory'),
             ],
-        ]);
+        ];
     }
 
     /**
-     * Print the Filters tab: the facets visitors refine results with.
+     * The Filters view's args for one list of facets.
      *
-     * Rows are the configured facets, in order. The add picker offers every
-     * data field with an enum (a facet's choices come from it) and, for
-     * organization directories, the organization type. Group directories
-     * offer the group type only. Adding, removing and
-     * reordering rows is `assets/js/admin.js`; without it, labels can still be
-     * edited. A saved facet the picker no longer offers stays, marked: the
-     * directory hides it from visitors until it has choices again.
+     * @param list<array{source: string, schema_key: string, field: string, label: string}> $facets The saved facets.
+     * @param DirectoryType $type What the facets filter: picks the choices offered.
+     * @param string        $lang Two-letter language code.
      *
-     * @param WP_Post $post Directory being edited.
-     *
-     * @return void
+     * @return array<string, mixed>
      */
-    public function render_filters_box(WP_Post $post): void
+    private function filters_view_args(array $facets, DirectoryType $type, string $lang): array
     {
-        $config = DirectoryConfig::from_post($post) ?? DirectoryConfig::defaults();
-        $lang = (string) wicket_get_current_language();
-        $choices = self::facet_choices($config->type, $this->schema_fields->for_type($config->type, $lang));
-
+        $choices = self::facet_choices($type, $this->schema_fields->for_type($type, $lang));
         $available = [];
 
         foreach ($choices as $group) {
@@ -316,7 +453,7 @@ final class DirectoryMetaBoxes
 
         $rows = [];
 
-        foreach ($config->facets as $facet) {
+        foreach ($facets as $facet) {
             $key = RequestParams::facet_key($facet);
 
             $rows[] = $facet + [
@@ -334,12 +471,12 @@ final class DirectoryMetaBoxes
             }
         }
 
-        $this->view('filters', [
+        return [
             'field'          => self::FIELD,
             'rows'           => $rows,
             'choices'        => $choices,
-            'schemas_failed' => $config->type !== DirectoryType::Group && $this->schema_fields->failed(),
-        ]);
+            'schemas_failed' => $type !== DirectoryType::Group && $this->schema_fields->failed(),
+        ];
     }
 
     /**
@@ -562,6 +699,48 @@ final class DirectoryMetaBoxes
                 ['member_count', 'view_members'],
             ],
         };
+    }
+
+    /**
+     * The Group Member card's settings, with their admin labels.
+     *
+     * The individual card's (card_fields()), plus the toggles of the
+     * member's row in the group: DirectoryConfig::MEMBERSHIP_FIELDS.
+     *
+     * @return array{
+     *     toggles: array<string, array{label: string, description: string}>,
+     *     refs: array<string, array{label: string, description: string, kinds: list<string>}>,
+     *     contacts: array<string, string>,
+     * }
+     */
+    public static function member_card_fields(): array
+    {
+        $fields = self::card_fields(DirectoryType::Individual);
+        $batch = __('Role, status and dates add one API request per page of results together.', 'wicket-directory');
+
+        $fields['toggles'] = [
+            'role'       => ['label' => __('Role', 'wicket-directory'), 'description' => __('The member\'s role in the group, e.g. Chair, under the name.', 'wicket-directory') . ' ' . $batch],
+            'status'     => ['label' => __('Member status', 'wicket-directory'), 'description' => __('Active or Inactive in the group, next to the name. Not the person\'s account status.', 'wicket-directory')],
+            'start_date' => ['label' => __('Start date', 'wicket-directory'), 'description' => ''],
+            'end_date'   => ['label' => __('End date', 'wicket-directory'), 'description' => __('"Present" while the term has no end date.', 'wicket-directory')],
+        ] + $fields['toggles'];
+
+        return $fields;
+    }
+
+    /**
+     * The order of the Group Member card's Card View list, as card_groups().
+     *
+     * @return list<list<string>>
+     */
+    public static function member_card_groups(): array
+    {
+        $groups = self::card_groups(DirectoryType::Individual);
+
+        // After the name: the member's role and status, then the term.
+        array_splice($groups, 1, 0, [['role', 'status'], ['start_date', 'end_date']]);
+
+        return $groups;
     }
 
     /**

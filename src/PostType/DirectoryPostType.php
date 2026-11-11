@@ -282,6 +282,11 @@ final class DirectoryPostType
                     'type'  => 'array',
                     'items' => $open_object,
                 ],
+                'member_card'   => $open_object,
+                'member_facets' => [
+                    'type'  => 'array',
+                    'items' => $open_object,
+                ],
                 'roster'        => $open_object,
                 'cache_version' => [
                     'type'    => 'integer',

@@ -15,6 +15,7 @@ namespace Wicket\Directory\Api;
  * latter and the no-results message for the former.
  *
  * @phpstan-type Tier array{id: string, slug: string, name: string}
+ * @phpstan-type Membership array{role: string, active: bool|null, start_date: string, end_date: string|null}
  */
 final class ResultPage
 {
@@ -35,6 +36,9 @@ final class ResultPage
      *                                                   directories whose card shows the count, and only
      *                                                   when the count is complete; EntryMapper falls
      *                                                   back to the group's `active_member_count`.
+     * @param array<string, Membership>   $group_members One `group_members` row per person UUID, for a
+     *                                                   group's member list whose card shows a role,
+     *                                                   status or date. People without a row are left out.
      */
     public function __construct(
         public readonly array $items,
@@ -46,6 +50,7 @@ final class ResultPage
         public readonly array $tiers = [],
         public readonly bool $unavailable = false,
         public readonly array $member_counts = [],
+        public readonly array $group_members = [],
     ) {}
 
     /**
@@ -117,8 +122,9 @@ final class ResultPage
             $data['per_page'],
             $data['tiers'],
             false,
-            // Pages cached before groups existed have no counts.
+            // Pages cached before groups existed have no counts, nor member rows.
             is_array($data['member_counts'] ?? null) ? array_filter($data['member_counts'], 'is_int') : [],
+            is_array($data['group_members'] ?? null) ? array_filter($data['group_members'], 'is_array') : [],
         );
     }
 
@@ -127,7 +133,7 @@ final class ResultPage
      *
      * Unavailable pages are never cached, so the flag isn't part of it.
      *
-     * @return array{items: list<array<string, mixed>>, included: list<array<string, mixed>>, total: int, page: int, total_pages: int, per_page: int, tiers: array<string, list<Tier>>, member_counts: array<string, int>}
+     * @return array{items: list<array<string, mixed>>, included: list<array<string, mixed>>, total: int, page: int, total_pages: int, per_page: int, tiers: array<string, list<Tier>>, member_counts: array<string, int>, group_members: array<string, Membership>}
      */
     public function to_array(): array
     {
@@ -140,6 +146,7 @@ final class ResultPage
             'per_page'    => $this->per_page,
             'tiers'         => $this->tiers,
             'member_counts' => $this->member_counts,
+            'group_members' => $this->group_members,
         ];
     }
 
@@ -194,7 +201,7 @@ final class ResultPage
      */
     public function with_tiers(array $tiers): self
     {
-        return new self($this->items, $this->included, $this->total, $this->page, $this->total_pages, $this->per_page, $tiers, $this->unavailable, $this->member_counts);
+        return new self($this->items, $this->included, $this->total, $this->page, $this->total_pages, $this->per_page, $tiers, $this->unavailable, $this->member_counts, $this->group_members);
     }
 
     /**
@@ -206,7 +213,31 @@ final class ResultPage
      */
     public function with_member_counts(array $member_counts): self
     {
-        return new self($this->items, $this->included, $this->total, $this->page, $this->total_pages, $this->per_page, $this->tiers, $this->unavailable, $member_counts);
+        return new self($this->items, $this->included, $this->total, $this->page, $this->total_pages, $this->per_page, $this->tiers, $this->unavailable, $member_counts, $this->group_members);
+    }
+
+    /**
+     * A copy with other group member rows.
+     *
+     * @param array<string, Membership> $group_members One row per person UUID.
+     *
+     * @return self
+     */
+    public function with_group_members(array $group_members): self
+    {
+        return new self($this->items, $this->included, $this->total, $this->page, $this->total_pages, $this->per_page, $this->tiers, $this->unavailable, $this->member_counts, $group_members);
+    }
+
+    /**
+     * One person's row in the group whose member list this page is.
+     *
+     * @param string $id Person UUID.
+     *
+     * @return Membership|null Null when the page has no row for the person.
+     */
+    public function group_member_for(string $id): ?array
+    {
+        return $this->group_members[$id] ?? null;
     }
 
     /**

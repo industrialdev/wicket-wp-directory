@@ -56,10 +56,39 @@ final class FacetOptions
      */
     public function for_config(DirectoryConfig $config, ?string $lang = null): array
     {
+        return $this->for_list($config->facets, $config, $lang);
+    }
+
+    /**
+     * The choices for every facet of a group directory's member lists.
+     *
+     * They are data fields on people (DirectoryConfig::$member_facets).
+     *
+     * @param DirectoryConfig $config The group directory's config.
+     * @param string|null     $lang   Two-letter language code. Defaults to wicket_get_current_language().
+     *
+     * @return array<string, list<FacetOption>> Facet key => choices, as for_config() gives them.
+     */
+    public function for_members(DirectoryConfig $config, ?string $lang = null): array
+    {
+        return $this->for_list($config->member_facets, $config, $lang);
+    }
+
+    /**
+     * The choices for a list of facets.
+     *
+     * @param list<Facet>     $facets Facets, in display order.
+     * @param DirectoryConfig $config The directory's config.
+     * @param string|null     $lang   Two-letter language code.
+     *
+     * @return array<string, list<FacetOption>>
+     */
+    private function for_list(array $facets, DirectoryConfig $config, ?string $lang): array
+    {
         $lang = QueryBuilder::language($lang ?? wicket_get_current_language());
         $options = [];
 
-        foreach ($config->facets as $facet) {
+        foreach ($facets as $facet) {
             $options[RequestParams::facet_key($facet)] = $this->for_facet($facet, $config, $lang);
         }
 

@@ -198,7 +198,7 @@ abstract class QueryBuilder
             $search[$opt_in_path] = $opt_in['value'];
         }
 
-        foreach ($config->facets as $facet) {
+        foreach ($this->facets($config) as $facet) {
             if ($facet['source'] !== DirectoryConfig::FACET_DATA_FIELD) {
                 continue;
             }
@@ -223,6 +223,18 @@ abstract class QueryBuilder
         }
 
         return $search;
+    }
+
+    /**
+     * The facets of what this builder lists.
+     *
+     * @param DirectoryConfig $config The directory's config.
+     *
+     * @return list<Facet> The directory's facets; a member list's are its own.
+     */
+    protected function facets(DirectoryConfig $config): array
+    {
+        return $config->facets;
     }
 
     /**

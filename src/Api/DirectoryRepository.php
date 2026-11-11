@@ -28,6 +28,7 @@ use WP_Post;
  *   empty page flagged `unavailable`. Failures aren't cached.
  *
  * @phpstan-import-type Tier from ResultPage
+ * @phpstan-import-type Membership from ResultPage
  */
 final class DirectoryRepository
 {
@@ -71,6 +72,13 @@ final class DirectoryRepository
      * list its inactive members; the list shows as unavailable.
      */
     public const ACTIVE_PEOPLE_PAGE_SIZE = 2000;
+
+    /**
+     * Page size of a member list page's `group_members` batch: the MDP's cap.
+     * A page of people holds far fewer rows; if it ever doesn't fit, the
+     * oldest rows are the ones left out.
+     */
+    public const GROUP_MEMBERS_PAGE_SIZE = 2000;
 
     /**
      * Returns the API client.
@@ -127,7 +135,8 @@ final class DirectoryRepository
 
             if (($config->card['membership_tier'] ?? false) === true) {
                 try {
-                    $page = $page->with_tiers($this->tiers($client, $config, $page->items, $lang));
+                    $entity = $config->type === DirectoryType::Individual ? 'person' : 'organization';
+                    $page = $page->with_tiers($this->tiers($client, $entity, $config->eligibility['membership_ids'], $page->items, $lang));
                 } catch (Throwable $e) {
                     // Show the results without tiers, but don't cache them, so the next visit retries.
                     $this->log_error($directory, 'Directory tier lookup failed: ' . $e->getMessage());
@@ -157,6 +166,11 @@ final class DirectoryRepository
      * Group Member Status Inactive first asks for the group's active people
      * (one `group_members/query`, cached like a page), to leave them out.
      * Pages are cached and fall back to the last page like fetch()'s.
+     *
+     * The Group Member card can add two batch requests per page, as fetch()'s
+     * cards do: the people's tiers (when it shows the tier) and their rows in
+     * the group (when it shows the role, status or a date). A batch that fails
+     * is logged, the page shows without it and isn't cached.
      *
      * @param WP_Post               $directory   The directory post.
      * @param DirectoryConfig       $config      The group directory's config.
@@ -194,8 +208,31 @@ final class DirectoryRepository
             return ResultPage::empty($per_page, true);
         }
 
-        // The member card shows no tiers or counts yet (phase 2 ticket P2.4 adds its fields).
-        return $this->load($directory, $config, $query, $per_page, $lang);
+        return $this->load($directory, $config, $query, $per_page, $lang, function (object $client, ResultPage $page) use ($directory, $config, $group, $lang): array {
+            $cacheable = true;
+
+            if (($config->member_card['membership_tier'] ?? false) === true) {
+                try {
+                    // A group directory has no tier eligibility, so every active tier shows.
+                    $page = $page->with_tiers($this->tiers($client, 'person', [], $page->items, $lang));
+                } catch (Throwable $e) {
+                    $this->log_error($directory, 'Member list tier lookup failed: ' . $e->getMessage());
+                    $cacheable = false;
+                }
+            }
+
+            if ($config->shows_membership()) {
+                try {
+                    $active_only = $config->roster['member_status'] === DirectoryConfig::MEMBER_STATUS_ACTIVE;
+                    $page = $page->with_group_members($this->group_members($client, $group, $page->items, $active_only));
+                } catch (Throwable $e) {
+                    $this->log_error($directory, 'Member list group member lookup failed: ' . $e->getMessage());
+                    $cacheable = false;
+                }
+            }
+
+            return [$page, $cacheable];
+        });
     }
 
     /**
@@ -374,18 +411,18 @@ final class DirectoryRepository
      * otherwise every distinct active tier is. See api-queries.md, "Tiers on
      * the card".
      *
-     * @param object                     $client API client.
-     * @param DirectoryConfig            $config The directory's config.
-     * @param list<array<string, mixed>> $items  The page's resources.
-     * @param string                     $lang   Two-letter language code, for `name_{lang}`.
+     * @param object                     $client  API client.
+     * @param string                     $entity  `person` or `organization`.
+     * @param list<string>               $allowed The directory's tier UUIDs (lower case); empty for any.
+     * @param list<array<string, mixed>> $items   The page's resources.
+     * @param string                     $lang    Two-letter language code, for `name_{lang}`.
      *
      * @throws RuntimeException When the response isn't a JSON:API list.
      *
      * @return array<string, list<Tier>> Keyed by entity UUID; entities with no tier are left out.
      */
-    private function tiers(object $client, DirectoryConfig $config, array $items, string $lang): array
+    private function tiers(object $client, string $entity, array $allowed, array $items, string $lang): array
     {
-        $entity = $config->type === DirectoryType::Individual ? 'person' : 'organization';
         $ids = array_values(array_unique(array_filter(
             array_map(static fn (array $item): string => is_string($item['id'] ?? null) ? $item['id'] : '', $items),
             static fn (string $id): bool => $id !== ''
@@ -417,7 +454,7 @@ final class DirectoryRepository
             }
         }
 
-        $allowed = array_flip($config->eligibility['membership_ids']);
+        $allowed = array_flip($allowed);
         $wanted = array_flip($ids);
         $tiers = [];
 
@@ -496,6 +533,81 @@ final class DirectoryRepository
         }
 
         return array_map('count', $people);
+    }
+
+    /**
+     * Each person's row in a group, for a page of its member list: one batch request.
+     *
+     * A person can have several rows (one per term), so the rows come newest
+     * first (`sort=-start_date`) and each person gets their newest active row,
+     * else their newest row. In the Active view only active rows are asked
+     * for, so it's the newest active term; in Inactive, the latest term; in
+     * All, the current term if there is one (api-queries.md, "Roster card:
+     * role, status and dates").
+     *
+     * @param object                     $client      API client.
+     * @param string                     $group       The group's UUID.
+     * @param list<array<string, mixed>> $items       The page's `people` resources.
+     * @param bool                       $active_only Ask for active rows only (Group Member Status Active).
+     *
+     * @throws RuntimeException When the response isn't a JSON:API list.
+     *
+     * @return array<string, Membership> Keyed by person UUID; people without a row are left out.
+     */
+    private function group_members(object $client, string $group, array $items, bool $active_only): array
+    {
+        $ids = array_values(array_unique(array_filter(
+            array_map(static fn (array $item): string => is_string($item['id'] ?? null) ? $item['id'] : '', $items),
+            static fn (string $id): bool => $id !== ''
+        )));
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $filter = [
+            'group_uuid_eq'  => strtolower(trim($group)),
+            'person_uuid_in' => $ids,
+        ];
+
+        if ($active_only) {
+            $filter['active_eq'] = true;
+        }
+
+        $query_string = http_build_query(['page' => ['size' => self::GROUP_MEMBERS_PAGE_SIZE], 'sort' => '-start_date']);
+        $response = $client->post('group_members/query?' . $query_string, ['json' => ['filter' => $filter]]);
+
+        if (!is_array($response) || !is_array($response['data'] ?? null)) {
+            throw new RuntimeException('Unexpected response from group_members/query.');
+        }
+
+        $wanted = array_flip($ids);
+        $rows = [];
+
+        foreach ($response['data'] as $row) {
+            $person = is_array($row) ? ($row['relationships']['person']['data']['id'] ?? null) : null;
+
+            if (!is_string($person) || !isset($wanted[$person])) {
+                continue;
+            }
+
+            $attributes = is_array($row['attributes'] ?? null) ? $row['attributes'] : [];
+            $active = is_bool($attributes['active'] ?? null) ? $attributes['active'] : null;
+
+            // Rows come newest first: keep the first, unless a later one is active and it isn't.
+            if (isset($rows[$person]) && ($rows[$person]['active'] === true || $active !== true)) {
+                continue;
+            }
+
+            $rows[$person] = [
+                'role'       => is_string($attributes['type'] ?? null) ? $attributes['type'] : '',
+                'active'     => $active,
+                'start_date' => is_string($attributes['start_date'] ?? null) ? $attributes['start_date'] : '',
+                'end_date'   => is_string($attributes['end_date'] ?? null) ? $attributes['end_date'] : null,
+            ];
+        }
+
+        return $rows;
     }
 
     /**

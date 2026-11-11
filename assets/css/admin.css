@@ -146,6 +146,28 @@
 	margin-top: 6px;
 }
 
+/* Card switch (group directories: Group Card or Group Member Card) */
+
+.wicket-directory-admin .wd-card-switch__options {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0 24px;
+}
+
+/* Without the script both cards' settings show; keep them apart. */
+.wicket-directory-admin .wd-card-section + .wd-card-section {
+	margin-top: 18px;
+	padding-top: 18px;
+	border-top: 1px solid var(--wd-admin-border-faint);
+}
+
+.wicket-directory-admin .wd-card-section[hidden] + .wd-card-section,
+.wicket-directory-admin .wd-card-section + .wd-card-section[hidden] {
+	margin-top: 0;
+	padding-top: 0;
+	border-top: 0;
+}
+
 /* Tabs */
 
 .wicket-directory-admin .wd-tabs {

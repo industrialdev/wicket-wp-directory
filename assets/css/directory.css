@@ -493,8 +493,14 @@
 	margin: 0;
 }
 
-.wicket-directory .wicket-directory-card__group-type {
+.wicket-directory .wicket-directory-card__group-type,
+.wicket-directory .wicket-directory-card__role {
 	color: var(--wd-text-muted);
+}
+
+/* Group Member card: job title, then the term's start and end dates. */
+.wicket-directory .wicket-directory-card__details > p + p {
+	margin-block-start: var(--wd-space-xs);
 }
 
 .wicket-directory .wicket-directory-card__member-count {

@@ -22,9 +22,18 @@
  * so every card key has a control here. Boolean checkboxes post a hidden "0"
  * first; data-field pickers post `"schema_key.field"` (`''` for none).
  *
+ * A group directory prints it twice: for `card`, and for its Group Member
+ * card (`section` `member_card`, with its own `id_prefix`, `label` and
+ * `intro`).
+ *
  * @var array{
  *     field: string,
  *     config: Wicket\Directory\Config\DirectoryConfig,
+ *     card?: array<string, mixed>,
+ *     section?: string,
+ *     id_prefix?: string,
+ *     label?: string,
+ *     intro?: string,
  *     groups: list<list<string>>,
  *     toggles: array<string, array{label: string, description: string}>,
  *     refs: array<string, array{label: string, description: string, selected: string, choices: array<string, array<string, string>>}>,
@@ -41,8 +50,9 @@ declare(strict_types=1);
 
 defined('ABSPATH') || exit;
 
-$card = $args['config']->card;
-$name = $args['field'] . '[card]';
+$card = $args['card'] ?? $args['config']->card;
+$name = $args['field'] . '[' . ($args['section'] ?? 'card') . ']';
+$id_prefix = $args['id_prefix'] ?? 'wicket-directory-card-';
 
 $chip_picker = static function (array $args): void {
     include __DIR__ . '/chip-picker.php';
@@ -101,14 +111,14 @@ $hint_state = static fn (array $rule): string => match (true) {
                 <p><?php esc_html_e('Contact types couldn\'t be loaded from Wicket. Saved types are kept.', 'wicket-directory'); ?></p>
             </div>
         <?php endif; ?>
-        <p class="wd-panel__label"><?php esc_html_e('Card details', 'wicket-directory'); ?></p>
-        <p class="wd-help wd-help--intro"><?php esc_html_e('Choose what each card shows.', 'wicket-directory'); ?></p>
+        <p class="wd-panel__label"><?php echo esc_html($args['label'] ?? __('Card details', 'wicket-directory')); ?></p>
+        <p class="wd-help wd-help--intro"><?php echo esc_html($args['intro'] ?? __('Choose what each card shows.', 'wicket-directory')); ?></p>
         <?php foreach ($args['groups'] as $index => $group) : ?>
             <?php if ($index > 0) : ?>
                 <hr class="wd-divider">
             <?php endif; ?>
             <?php foreach ($group as $key) : ?>
-                <?php $id = 'wicket-directory-card-' . $key; ?>
+                <?php $id = $id_prefix . $key; ?>
 
                 <?php if (isset($args['toggles'][$key])) : ?>
                     <?php $toggle = $args['toggles'][$key]; ?>

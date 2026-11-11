@@ -459,7 +459,7 @@ $client->post('group_members/query?page%5Bsize%5D=2000&sort=-start_date', ['json
 ]]]);
 ```
 
-Verified: FIG C's 5 people → 6 rows. Map rows to people with `relationships.person.data.id`. A person can have several rows, so take **the first row per person** with `sort=-start_date` (verified; `start_date` ascending works too, `end_date` isn't a sort key). In the Active mode that's the newest active term; in All and Inactive it's the latest term. `type` is the role slug, `active` the in-group status, `start_date` / `end_date` the dates (`end_date` null → "Present").
+Verified: FIG C's 5 people → 6 rows. Map rows to people with `relationships.person.data.id`. A person can have several rows, so take **the first row per person** with `sort=-start_date` (verified; `start_date` ascending works too, `end_date` isn't a sort key). In the Active mode that's the newest active term; in All and Inactive it's the latest term. **P2.4 refinement:** the directory keeps each person's newest *active* row, else their newest row. That changes nothing in Active and Inactive, and in All it shows the term the person is in now rather than a newer one that has ended. `type` is the role slug, `active` the in-group status, `start_date` / `end_date` the dates (`end_date` null → "Present").
 
 Other `group_members/query` keys, all verified (no-match → 0): `group_uuid_eq`, `group_uuid_in`, `person_uuid_in`, `active_eq` (FIG C: `true` → 6, `false` → 49), `active_at` (`'now'` → 6, `'1900-01-01'` → 0), `resource_type_slug_in`, `person_given_name_cont`, `person_family_name_cont`, `person_full_name_cont`, `person_addresses_city_i_cont`, `person_search_query` (the keyword form `wicket_search_group_members()` sends). **Ignored:** `type_eq`, `search_query`.
 

@@ -4,8 +4,8 @@ Wicket Directory adds configurable public directories of **Individuals** and **O
 
 > **Status: in development (scaffold landed).** The approved plan is `docs/engineering/mvp-plan.md`. Read it before writing code; it is the source of truth for scope, data model and decisions. Classes and paths below are the planned layout unless marked as landed. Update this file as they land.
 
-MVP scope: Individual and Organization directories only. Phase 2 (`docs/engineering/phase-2-tickets.md`) is under way: the Group directory type landed in P2.1 (config, query builder, eligibility, data, admin), its card in P2.2, and group member lists (Default View, View Members, Back to Directory) in P2.3. These are still deferred, so don't build them without being asked:
-- the Group Member card with its own card config and facets (P2.4); until then a member list uses the individual card without contact details and has no facets
+MVP scope: Individual and Organization directories only. Phase 2 (`docs/engineering/phase-2-tickets.md`) is under way: the Group directory type landed in P2.1 (config, query builder, eligibility, data, admin), its card in P2.2, group member lists (Default View, View Members, Back to Directory) in P2.3, and the Group Member card with its own card config and facets in P2.4. These are still deferred, so don't build them without being asked:
+- Employer on the individual and Group Member cards (P2.6)
 - Organization Contact (Membership Owner / Relationship Types)
 - the Developer panel UI
 - the `[col]/{{field}}` merge-tag card editor
@@ -53,9 +53,13 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
                                  (individual | organization | group; has_location() is false for groups). Every type stores every eligibility key; keys
                                  that don't apply keep their defaults (groups: no tiers/opt-in; others: no group_status/group_types/excluded_groups).
                                  `roster` section (P2.3; defaults for non-groups): default_view groups | members | groups_members (default), group (UUID,
-                                 Group Members view), member_status active | inactive | all; has_roster(); member_card() = individual card, contacts off
+                                 Group Members view), member_status active | inactive | all; has_roster().
+                                 `member_card` (P2.4) = the Group Member card: the individual card's keys (contacts off by default) + MEMBERSHIP_FIELDS
+                                 role | status | start_date | end_date (on); `member_facets` = data-field facets on people. Groups only: other types keep
+                                 the defaults, and a type change resets both. shows_membership() = any group field on; member_card() = the property
     Admin\DirectoryMetaBoxes     (landed, admin only) one "Directory settings" meta box (render_box → views/settings.php); posts `wicket_directory[...]`;
-                                 save_post handler lays the posted SECTIONS (`type`, `eligibility`, `card`, `facets`) over the stored config
+                                 save_post handler lays the posted SECTIONS (`type`, `eligibility`, `card`, `facets`, `member_card`, `member_facets`,
+                                 `roster`) over the stored config
                                  → DirectoryConfig::sanitize(…, previous) (nonce, manage_options + edit_post). Directory panels on top (views/directory.php:
                                  type select, chip pickers for tiers/org types, active-members, opt-in; for groups: Group status, group types, groups to exclude.
                                  `data-wd-type` takes space-separated types; Default view, Group and Group member status panels use `data-wd-view` too),
@@ -63,6 +67,10 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
                                  card_groups(type) order, card_fields(type) lists its controls; ticked items reveal their options) and Filters
                                  (views/filters.php; facet_choices(type, schemas) = org type + enum data fields, or group type only; a hidden `facets` marker lets "no rows" save;
                                  searchable picker); views/chip-picker.php is the shared multi-select. Data-field pickers post "schema_key.field".
+                                 A group directory's tabs hold both cards in `data-wd-card="group|member"` sections: the Group card + facets, and the
+                                 Group Member card (member_card_fields(), member_card_groups(); section `member_card`, ids `wicket-directory-member-card-*`)
+                                 + member list facets (person enum data fields; section `member_facets`). views/card-switch.php (render_card_switch, above
+                                 the tabs, Group List + Member List only) picks one; the other views show only the card they reach
                                  assets/js/admin.js (no build): type toggles, tabs, popovers, chips, reveals and contact hints, facet repeater;
                                  assets/css/admin.css styles the box. Everything posts the same without the script
       → Admin\MembershipTiers    (landed) tier choices from GET memberships, filtered by type
@@ -93,8 +101,11 @@ Block render_callback / ServerSideRender
           Member List); DirectoryRepository::group() guards it (not found → the list, or a notice in the Group Members view), then
           render_roster(): RequestParams::for_roster() (wd{ID}m_ prefix, person sorts) → before_render → fetch_roster()
           (Query\RosterQueryBuilder: people/query + group_members_group_uuid_eq + member status; Inactive = uuid_not_in the group's
-          active people; keyword ORs matching role slugs) → EntryMapper::map_members() (PersonEntry, member_card()) → directory.php with
-          `roster` (GroupEntry header + back URL), `type` Individual, `card`, `facets` → parts/roster-header + cards/card-individual
+          active people; keyword ORs matching role slugs; member_facets as search_query) + its batches (tiers; one group_members/query
+          per page, sort -start_date, each person's newest active row else newest → ResultPage::group_members) → EntryMapper::map_members()
+          (Data\GroupMemberEntry = PersonEntry + role, role_label, status, start_date, end_date `Y-m-d` | END_PRESENT) → directory.php
+          with `roster` (GroupEntry header + back URL), `type` Individual, `card` member_card, `facets` member_facets
+          (FacetOptions::for_members) → parts/roster-header + cards/card-group-member
       → Data\FacetOptions        (landed) for_config(config, lang) → facet key => [{value, label}] from enums; values() → RequestParams' allow-list
       → Query\RequestParams      (landed) flat GET params prefixed `wd{ID}_…`; sort tokens from DirectoryType::sort_options(); location ignored for groups
       → do_action before_render, before_render_{slug} (before the API query; echoed output comes first)
@@ -115,6 +126,8 @@ Block render_callback / ServerSideRender
           parts/pagination (landed): wicket_pagination() if the theme has it, else paginate_links() in nav.wicket-pagination; base on wd{ID}_pg
           parts/no-results (landed): no-results message, or the alert component for an `unavailable` page
           cards/card-individual (landed): component-card-listing classes; details / address / contact columns; tag, button, link + icon components
+          cards/card-group-member (landed): the individual card + status pill (tag) beside the name, role under it, start / end date
+            ("Present") in Details
           cards/card-organization (landed): same structure; org type under the name, logo, description with Show more / Show less (Alpine) past 40 words
           cards/card-group (landed): summary row of [name + status pill (tag) / group type] and [member count + View Members button],
             side by side via @container; description with Show more / Show less; no image. The button shows only when
@@ -161,7 +174,7 @@ There is **one render path**. The frontend and the block editor preview both go 
 | Hook | Purpose |
 |---|---|
 | `wicket_directory/query_args`, `wicket_directory/query_args_{slug}` (filter) | (landed) Modify the API query before it runs. Gets `$args` (`filter`, `page`, `sort`, `include`), `DirectoryConfig`, `RequestParams`. `{slug}` is the directory post's slug. A group member list's query is a `people/query`: tell it by `$params->is_roster()` |
-| `wicket_directory/entry`, `wicket_directory/entry_{slug}` (filter) | (landed) Modify one entry's data before its card renders. Gets the entry's `to_array()`, the raw API resource and `DirectoryConfig`; returns the array. Unknown keys are dropped and wrong-typed values keep the original; custom data goes under `extra` |
+| `wicket_directory/entry`, `wicket_directory/entry_{slug}` (filter) | (landed) Modify one entry's data before its card renders. Gets the entry's `to_array()`, the raw API resource and `DirectoryConfig`; returns the array. Unknown keys are dropped and wrong-typed values keep the original; custom data goes under `extra`. A member list's entries also have `role`, `role_label`, `status`, `start_date`, `end_date` |
 | `wicket_directory/before_render`, `wicket_directory/before_render_{slug}` (action) | (landed) Runs before the listing's API query and render. Gets `DirectoryConfig`, `RequestParams`, the directory `WP_Post`. Output it prints comes before the directory. Not fired for a missing or unpublished directory. For a group member list it gets the member list's params and runs after the group lookup |
 | `wicket_directory/card_template` (filter) | (landed) Swap the card template file, once per render. Gets the located absolute path (`''` when none), `DirectoryConfig`, the directory `WP_Post`. A return that isn't an existing file keeps the located one |
 | `wicket_directory/cache_ttl` (filter) | (landed) API response cache lifetime in seconds (default 600). Gets `$ttl`, `DirectoryConfig`, the directory `WP_Post`. `0` disables the cache |

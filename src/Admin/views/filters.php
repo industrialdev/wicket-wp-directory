@@ -12,8 +12,14 @@
  *
  * Only the saved type's filters are printed; a type change resets them on save.
  *
+ * A group directory prints it twice: for `facets`, and for its member lists
+ * (`section` `member_facets`, with its own `id_prefix` and `label`).
+ *
  * @var array{
  *     field: string,
+ *     section?: string,
+ *     id_prefix?: string,
+ *     label?: string,
  *     rows: list<array{source: string, schema_key: string, field: string, label: string, key: string, name: string, placeholder: string, available: bool, code: string}>,
  *     choices: array<string, array<string, array{source: string, schema_key: string, field: string, name: string, default: string, placeholder: string, code: string}>>,
  *     schemas_failed: bool,
@@ -24,7 +30,8 @@ declare(strict_types=1);
 
 defined('ABSPATH') || exit;
 
-$name = $args['field'] . '[facets]';
+$name = $args['field'] . '[' . ($args['section'] ?? 'facets') . ']';
+$id_prefix = $args['id_prefix'] ?? 'wicket-directory-facet';
 $keys = array_column($args['rows'], 'key');
 
 // The blank row admin.js clones; it fills in the values and renumbers the names.
@@ -48,8 +55,9 @@ $template_row = [
  * @param array<string, mixed> $row   The row's facet, key, name, code and placeholder.
  * @param bool                 $first Whether it's the first row (no Move up).
  * @param bool                 $last  Whether it's the last row (no Move down).
+ * @param string               $ids   Prefix of the label field's id.
  */
-$print_row = static function (string $name, int|string $index, array $row, bool $first = false, bool $last = false): void {
+$print_row = static function (string $name, int|string $index, array $row, bool $first = false, bool $last = false, string $ids = 'wicket-directory-facet'): void {
     $prefix = $name . '[' . $index . ']';
     ?>
     <div class="wd-facet" data-wd-facet-row data-facet-key="<?php echo esc_attr($row['key']); ?>">
@@ -75,8 +83,8 @@ $print_row = static function (string $name, int|string $index, array $row, bool 
             <?php endforeach; ?>
         </div>
         <div class="wd-facet__label">
-            <label class="wd-caption" for="wicket-directory-facet-<?php echo esc_attr($row['key']); ?>"><?php esc_html_e('Label', 'wicket-directory'); ?></label>
-            <input type="text" id="wicket-directory-facet-<?php echo esc_attr($row['key']); ?>" class="wd-field" data-wd-facet-input="label" name="<?php echo esc_attr($prefix . '[label]'); ?>" value="<?php echo esc_attr($row['label']); ?>" placeholder="<?php echo esc_attr($row['placeholder']); ?>">
+            <label class="wd-caption" for="<?php echo esc_attr($ids . '-' . $row['key']); ?>"><?php esc_html_e('Label', 'wicket-directory'); ?></label>
+            <input type="text" id="<?php echo esc_attr($ids . '-' . $row['key']); ?>" class="wd-field" data-wd-facet-input="label" name="<?php echo esc_attr($prefix . '[label]'); ?>" value="<?php echo esc_attr($row['label']); ?>" placeholder="<?php echo esc_attr($row['placeholder']); ?>">
         </div>
         <button type="button" class="wd-icon-button wd-icon-button--delete" data-wd-facet-remove>
             <span class="dashicons dashicons-trash" aria-hidden="true"></span>
@@ -86,7 +94,7 @@ $print_row = static function (string $name, int|string $index, array $row, bool 
     <?php
 };
 ?>
-<div class="wicket-directory-filter-settings" data-wicket-directory-filters data-name="<?php echo esc_attr($name); ?>">
+<div class="wicket-directory-filter-settings" data-wicket-directory-filters data-name="<?php echo esc_attr($name); ?>" data-id-prefix="<?php echo esc_attr($id_prefix); ?>">
     <p class="wd-help" data-wd-type-changed hidden><?php esc_html_e('Save the directory to set up filters for the new type.', 'wicket-directory'); ?></p>
     <div data-wd-type-unchanged>
         <?php if ($args['schemas_failed']) : ?>
@@ -94,12 +102,12 @@ $print_row = static function (string $name, int|string $index, array $row, bool 
                 <p><?php esc_html_e('Data fields couldn\'t be loaded from Wicket. Saved filters are kept.', 'wicket-directory'); ?></p>
             </div>
         <?php endif; ?>
-        <p class="wd-panel__label"><?php esc_html_e('Available filter facets', 'wicket-directory'); ?></p>
+        <p class="wd-panel__label"><?php echo esc_html($args['label'] ?? __('Available filter facets', 'wicket-directory')); ?></p>
         <p class="wd-help wd-help--intro"><?php esc_html_e('Filters appear in Refine Results in this order, with these labels; an empty label shows the field\'s key. Only fields with a fixed list of choices can be filters, and each can be added once.', 'wicket-directory'); ?></p>
         <input type="hidden" name="<?php echo esc_attr($name); ?>" value="">
         <div class="wd-facets" data-wd-facet-rows>
             <?php foreach ($args['rows'] as $index => $row) : ?>
-                <?php $print_row($name, $index, $row, $index === 0, $index === count($args['rows']) - 1); ?>
+                <?php $print_row($name, $index, $row, $index === 0, $index === count($args['rows']) - 1, $id_prefix); ?>
             <?php endforeach; ?>
         </div>
         <p class="wd-help" data-wd-facet-empty <?php echo $args['rows'] === [] ? '' : 'hidden'; ?>><?php esc_html_e('No filters yet. Visitors see no Refine Results panel.', 'wicket-directory'); ?></p>
@@ -111,8 +119,8 @@ $print_row = static function (string $name, int|string $index, array $row, bool 
             <div class="wd-fieldpicker__panel">
                 <div class="wd-fieldpicker__search">
                     <span class="dashicons dashicons-search" aria-hidden="true"></span>
-                    <label class="screen-reader-text" for="wicket-directory-facet-search"><?php esc_html_e('Search fields', 'wicket-directory'); ?></label>
-                    <input type="search" id="wicket-directory-facet-search" placeholder="<?php esc_attr_e('Search fields…', 'wicket-directory'); ?>" data-wd-facet-search>
+                    <label class="screen-reader-text" for="<?php echo esc_attr($id_prefix . '-search'); ?>"><?php esc_html_e('Search fields', 'wicket-directory'); ?></label>
+                    <input type="search" id="<?php echo esc_attr($id_prefix . '-search'); ?>" placeholder="<?php esc_attr_e('Search fields…', 'wicket-directory'); ?>" data-wd-facet-search>
                 </div>
                 <div class="wd-fieldpicker__list">
                     <?php foreach ($args['choices'] as $group => $choices) : ?>
@@ -144,7 +152,7 @@ $print_row = static function (string $name, int|string $index, array $row, bool 
             </div>
         </details>
         <template data-wd-facet-template>
-            <?php $print_row($name, '', $template_row); ?>
+            <?php $print_row($name, '', $template_row, false, false, $id_prefix); ?>
         </template>
         <p class="wd-help"><?php esc_html_e('Whether the keyword search, location search, filters and Order by are shown is set on each Wicket Directory block, not here.', 'wicket-directory'); ?></p>
     </div>

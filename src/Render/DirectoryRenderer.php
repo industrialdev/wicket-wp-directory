@@ -253,8 +253,10 @@ final class DirectoryRenderer
     /**
      * Print one group's member list.
      *
-     * Members are people: the individual sort options, location search and
-     * card apply, with params of their own (RequestParams::for_roster()). In
+     * Members are people: the individual sort options and location search
+     * apply, with params of their own (RequestParams::for_roster()). The
+     * card is the Group Member card (`cards/card-group-member`) and the
+     * facets are the member list's, both from the directory's config. In
      * the Group List + Member List view the block's member list settings
      * apply and the header links back to the group list; in the Group
      * Members view the member list is the directory, so the block's main
@@ -274,15 +276,15 @@ final class DirectoryRenderer
         $uuid = strtolower((string) $group['id']);
         $is_preview = ($this->is_preview)();
 
-        // The member list's facets come with the Group Member card (phase 2 ticket P2.4).
-        $facet_options = [];
+        // Hidden filters ignore their params, so their choices aren't needed.
+        $facet_options = $attributes->hide_filters ? [] : $this->facets->for_members($config, $lang);
 
         // With the group list, the block's sort is a group sort, so the list starts on the individual default.
         $params = RequestParams::for_roster(
             $directory->ID,
             $uuid,
-            [],
-            [],
+            $config->member_facets,
+            FacetOptions::values($facet_options),
             $attributes->sort(DirectoryType::Individual),
             hide_keyword: $attributes->hide_keyword,
             hide_location: $attributes->hide_location,
@@ -305,14 +307,14 @@ final class DirectoryRenderer
 
         $this->load_directory($directory, $config, $attributes, $params, $page, $entries, $facet_options, [
             'type'            => DirectoryType::Individual,
-            'card'            => $config->member_card(),
-            'facets'          => [],
+            'card'            => $config->member_card,
+            'facets'          => $config->member_facets,
             'collapse_refine' => $with_list ? $attributes->collapse_roster_refine_on_mobile : $attributes->collapse_refine_on_mobile,
             'roster'          => [
                 'group'    => $this->mapper->roster_group($group, $lang),
                 'back_url' => $back_url,
             ],
-            'card_template'   => $this->card_template($directory, $config, 'cards/card-individual'),
+            'card_template'   => $this->card_template($directory, $config, 'cards/card-group-member'),
         ], $lang);
     }
 
@@ -387,8 +389,8 @@ final class DirectoryRenderer
     /**
      * The card template file for a directory.
      *
-     * `$name` (`cards/card-{type}`, or `cards/card-individual` for a member
-     * list), as located by TemplateLoader, then the
+     * `$name` (`cards/card-{type}`, or `cards/card-group-member` for a
+     * member list), as located by TemplateLoader, then the
      * `wicket_directory/card_template` filter. A filter result that isn't an
      * existing file keeps the located one.
      *

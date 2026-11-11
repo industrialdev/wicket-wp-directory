@@ -10,6 +10,10 @@
  *   lists several separated by spaces.
  * - `[data-wd-view="…"]` shows only for that Default View (or views), on top
  *   of its `data-wd-type`.
+ * - `[data-wd-card="group|member"]` is a group directory's Group card or
+ *   Group Member card settings. The Group List view shows the first, Group
+ *   Members the second, and Group List + Member List the one picked with the
+ *   card switch (`[data-wd-card-switch]` radios).
  * - `[data-wd-type-changed]` shows only while the selected type differs from
  *   the saved one; `[data-wd-type-unchanged]` only while it matches.
  *
@@ -26,6 +30,10 @@
 	const savedType = box.dataset.savedType;
 	const select = box.querySelector( 'select[name$="[type]"]' );
 	const viewSelect = box.querySelector( '[data-wd-view-select]' );
+	const cardSwitch = Array.from(
+		document.querySelectorAll( '[data-wd-card-switch]' )
+	);
+	const views = { groups: 'group', members: 'member' };
 
 	const toggle = ( selector, hide ) => {
 		document.querySelectorAll( selector ).forEach( ( el ) => {
@@ -38,14 +46,20 @@
 	const update = () => {
 		const type = select ? select.value : savedType;
 		const view = viewSelect ? viewSelect.value : '';
+		const card =
+			views[ view ] ||
+			cardSwitch.find( ( input ) => input.checked )?.value ||
+			'group';
 
 		toggle(
-			'[data-wd-type], [data-wd-view]',
+			'[data-wd-type], [data-wd-view], [data-wd-card]',
 			( el ) =>
 				( el.dataset.wdType !== undefined &&
 					! lists( el.dataset.wdType, type ) ) ||
 				( el.dataset.wdView !== undefined &&
-					! lists( el.dataset.wdView, view ) )
+					! lists( el.dataset.wdView, view ) ) ||
+				( el.dataset.wdCard !== undefined &&
+					el.dataset.wdCard !== card )
 		);
 		toggle( '[data-wd-type-changed]', () => type === savedType );
 		toggle( '[data-wd-type-unchanged]', () => type !== savedType );
@@ -53,6 +67,9 @@
 
 	select?.addEventListener( 'change', update );
 	viewSelect?.addEventListener( 'change', update );
+	cardSwitch.forEach( ( input ) =>
+		input.addEventListener( 'change', update )
+	);
 
 	update();
 } )();
@@ -295,172 +312,177 @@
  * Rows post `{name}[i][source|schema_key|field|label]`; after every change the
  * rows are renumbered in DOM order, so the saved order is the order shown.
  * Picker choices already in the list are disabled: a facet can be added once.
- * The picker's search box filters its choices by label and code.
+ * The picker's search box filters its choices by label and code. A group
+ * directory has two lists (the group list's and the member lists'), each
+ * with its own name and id prefix.
  */
-( function () {
-	const box = document.querySelector( '[data-wicket-directory-filters]' );
-
-	if ( ! box ) {
-		return;
-	}
-
-	const name = box.dataset.name;
-	const rows = box.querySelector( '[data-wd-facet-rows]' );
-	const empty = box.querySelector( '[data-wd-facet-empty]' );
-	const picker = box.querySelector( '[data-wd-facet-picker]' );
-	const search = box.querySelector( '[data-wd-facet-search]' );
-	const noMatch = box.querySelector( '[data-wd-facet-no-match]' );
-	const choices = Array.from(
-		box.querySelectorAll( '[data-wd-facet-choice]' )
-	);
-	const template = box.querySelector( '[data-wd-facet-template]' );
-
-	const sync = () => {
-		const all = Array.from(
-			rows.querySelectorAll( '[data-wd-facet-row]' )
+document
+	.querySelectorAll( '[data-wicket-directory-filters]' )
+	.forEach( ( box ) => {
+		const name = box.dataset.name;
+		const idPrefix = box.dataset.idPrefix || 'wicket-directory-facet';
+		const rows = box.querySelector( '[data-wd-facet-rows]' );
+		const empty = box.querySelector( '[data-wd-facet-empty]' );
+		const picker = box.querySelector( '[data-wd-facet-picker]' );
+		const search = box.querySelector( '[data-wd-facet-search]' );
+		const noMatch = box.querySelector( '[data-wd-facet-no-match]' );
+		const choices = Array.from(
+			box.querySelectorAll( '[data-wd-facet-choice]' )
 		);
-		const keys = all.map( ( row ) => row.dataset.facetKey );
+		const template = box.querySelector( '[data-wd-facet-template]' );
 
-		all.forEach( ( row, index ) => {
-			row.querySelectorAll( '[data-wd-facet-input]' ).forEach(
-				( input ) => {
-					input.name = `${ name }[${ index }][${ input.dataset.wdFacetInput }]`;
-				}
+		const sync = () => {
+			const all = Array.from(
+				rows.querySelectorAll( '[data-wd-facet-row]' )
 			);
-			row.querySelector( '[data-wd-facet-move="-1"]' ).disabled =
-				index === 0;
-			row.querySelector( '[data-wd-facet-move="1"]' ).disabled =
-				index === all.length - 1;
-		} );
+			const keys = all.map( ( row ) => row.dataset.facetKey );
 
-		choices.forEach( ( choice ) => {
-			choice.disabled = keys.includes( choice.value );
-		} );
+			all.forEach( ( row, index ) => {
+				row.querySelectorAll( '[data-wd-facet-input]' ).forEach(
+					( input ) => {
+						input.name = `${ name }[${ index }][${ input.dataset.wdFacetInput }]`;
+					}
+				);
+				row.querySelector( '[data-wd-facet-move="-1"]' ).disabled =
+					index === 0;
+				row.querySelector( '[data-wd-facet-move="1"]' ).disabled =
+					index === all.length - 1;
+			} );
 
-		empty.hidden = keys.length > 0;
-	};
+			choices.forEach( ( choice ) => {
+				choice.disabled = keys.includes( choice.value );
+			} );
 
-	const filter = () => {
-		const query = search.value.trim().toLowerCase();
-		let shown = 0;
-
-		box.querySelectorAll( '[data-wd-facet-group]' ).forEach( ( group ) => {
-			let groupShown = 0;
-
-			group
-				.querySelectorAll( '[data-wd-facet-choice]' )
-				.forEach( ( choice ) => {
-					const match =
-						query === '' ||
-						choice.textContent.toLowerCase().includes( query );
-
-					choice.hidden = ! match;
-					groupShown += match ? 1 : 0;
-				} );
-
-			group.hidden = groupShown === 0;
-			shown += groupShown;
-		} );
-
-		noMatch.hidden = shown > 0;
-	};
-
-	const add = ( choice ) => {
-		if ( choice.disabled ) {
-			return;
-		}
-
-		const row = template.content
-			.querySelector( '[data-wd-facet-row]' )
-			.cloneNode( true );
-		const values = {
-			source: choice.dataset.source,
-			schema_key: choice.dataset.schemaKey,
-			field: choice.dataset.field,
-			label: choice.dataset.default,
+			empty.hidden = keys.length > 0;
 		};
 
-		row.dataset.facetKey = choice.value;
-		row.querySelector( '[data-wd-facet-name]' ).textContent =
-			choice.dataset.name;
-		row.querySelector( '[data-wd-facet-code]' ).textContent =
-			choice.dataset.code;
-		row.querySelectorAll( '[data-wd-facet-input]' ).forEach( ( input ) => {
-			input.value = values[ input.dataset.wdFacetInput ];
-		} );
+		const filter = () => {
+			const query = search.value.trim().toLowerCase();
+			let shown = 0;
 
-		const label = row.querySelector( '[data-wd-facet-input="label"]' );
-		label.placeholder = choice.dataset.placeholder;
-		label.id = `wicket-directory-facet-${ choice.value }`;
-		row.querySelector( 'label' ).htmlFor = label.id;
+			box.querySelectorAll( '[data-wd-facet-group]' ).forEach(
+				( group ) => {
+					let groupShown = 0;
 
-		rows.append( row );
-		sync();
-		picker.open = false;
-		search.value = '';
-		filter();
-		label.focus();
-	};
+					group
+						.querySelectorAll( '[data-wd-facet-choice]' )
+						.forEach( ( choice ) => {
+							const match =
+								query === '' ||
+								choice.textContent
+									.toLowerCase()
+									.includes( query );
 
-	picker.addEventListener( 'toggle', () => {
-		if ( picker.open ) {
-			search.focus();
-		}
-	} );
+							choice.hidden = ! match;
+							groupShown += match ? 1 : 0;
+						} );
 
-	search.addEventListener( 'input', filter );
-
-	// Enter in the search box adds the first match instead of saving the post.
-	search.addEventListener( 'keydown', ( event ) => {
-		if ( event.key === 'Enter' ) {
-			event.preventDefault();
-
-			const first = choices.find(
-				( choice ) => ! choice.hidden && ! choice.disabled
+					group.hidden = groupShown === 0;
+					shown += groupShown;
+				}
 			);
 
-			if ( first ) {
-				add( first );
+			noMatch.hidden = shown > 0;
+		};
+
+		const add = ( choice ) => {
+			if ( choice.disabled ) {
+				return;
 			}
-		}
-	} );
 
-	box.addEventListener( 'click', ( event ) => {
-		const button = event.target.closest( 'button' );
-		const row = button?.closest( '[data-wd-facet-row]' );
+			const row = template.content
+				.querySelector( '[data-wd-facet-row]' )
+				.cloneNode( true );
+			const values = {
+				source: choice.dataset.source,
+				schema_key: choice.dataset.schemaKey,
+				field: choice.dataset.field,
+				label: choice.dataset.default,
+			};
 
-		if ( ! button ) {
-			return;
-		}
+			row.dataset.facetKey = choice.value;
+			row.querySelector( '[data-wd-facet-name]' ).textContent =
+				choice.dataset.name;
+			row.querySelector( '[data-wd-facet-code]' ).textContent =
+				choice.dataset.code;
+			row.querySelectorAll( '[data-wd-facet-input]' ).forEach(
+				( input ) => {
+					input.value = values[ input.dataset.wdFacetInput ];
+				}
+			);
 
-		if ( button.matches( '[data-wd-facet-choice]' ) ) {
-			add( button );
-		} else if ( row && button.matches( '[data-wd-facet-remove]' ) ) {
-			row.remove();
+			const label = row.querySelector( '[data-wd-facet-input="label"]' );
+			label.placeholder = choice.dataset.placeholder;
+			label.id = `${ idPrefix }-${ choice.value }`;
+			row.querySelector( 'label' ).htmlFor = label.id;
+
+			rows.append( row );
 			sync();
-			picker.querySelector( 'summary' ).focus();
-		} else if ( row && button.matches( '[data-wd-facet-move]' ) ) {
-			const up = button.dataset.wdFacetMove === '-1';
-			const sibling = up
-				? row.previousElementSibling
-				: row.nextElementSibling;
+			picker.open = false;
+			search.value = '';
+			filter();
+			label.focus();
+		};
 
-			if ( sibling ) {
-				sibling.insertAdjacentElement(
-					up ? 'beforebegin' : 'afterend',
-					row
-				);
-				sync();
-				( button.disabled
-					? row.querySelector(
-							`[data-wd-facet-move="${ up ? 1 : -1 }"]`
-					  )
-					: button
-				).focus();
+		picker.addEventListener( 'toggle', () => {
+			if ( picker.open ) {
+				search.focus();
 			}
-		}
-	} );
+		} );
 
-	sync();
-	filter();
-} )();
+		search.addEventListener( 'input', filter );
+
+		// Enter in the search box adds the first match instead of saving the post.
+		search.addEventListener( 'keydown', ( event ) => {
+			if ( event.key === 'Enter' ) {
+				event.preventDefault();
+
+				const first = choices.find(
+					( choice ) => ! choice.hidden && ! choice.disabled
+				);
+
+				if ( first ) {
+					add( first );
+				}
+			}
+		} );
+
+		box.addEventListener( 'click', ( event ) => {
+			const button = event.target.closest( 'button' );
+			const row = button?.closest( '[data-wd-facet-row]' );
+
+			if ( ! button ) {
+				return;
+			}
+
+			if ( button.matches( '[data-wd-facet-choice]' ) ) {
+				add( button );
+			} else if ( row && button.matches( '[data-wd-facet-remove]' ) ) {
+				row.remove();
+				sync();
+				picker.querySelector( 'summary' ).focus();
+			} else if ( row && button.matches( '[data-wd-facet-move]' ) ) {
+				const up = button.dataset.wdFacetMove === '-1';
+				const sibling = up
+					? row.previousElementSibling
+					: row.nextElementSibling;
+
+				if ( sibling ) {
+					sibling.insertAdjacentElement(
+						up ? 'beforebegin' : 'afterend',
+						row
+					);
+					sync();
+					( button.disabled
+						? row.querySelector(
+								`[data-wd-facet-move="${ up ? 1 : -1 }"]`
+						  )
+						: button
+					).focus();
+				}
+			}
+		} );
+
+		sync();
+		filter();
+	} );

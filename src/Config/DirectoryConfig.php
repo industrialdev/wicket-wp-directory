@@ -119,6 +119,13 @@ final class DirectoryConfig
     public const MEMBER_STATUSES = [self::MEMBER_STATUS_ACTIVE, self::MEMBER_STATUS_INACTIVE, self::MEMBER_STATUS_ALL];
 
     /**
+     * Group Member card keys that come from the person's row in the group
+     * (`group_members`), not from the person: role, in-group status and term
+     * dates. Only a group's member list has them.
+     */
+    public const MEMBERSHIP_FIELDS = ['role', 'status', 'start_date', 'end_date'];
+
+    /**
      * Use defaults(), from_post() or sanitize().
      *
      * @param DirectoryType        $type          What the directory lists.
@@ -129,6 +136,11 @@ final class DirectoryConfig
      * @param Roster               $roster        Group directories' member list: the Default View, the
      *                                            group it shows in the Group Members view, and the
      *                                            Group Member Status. Defaults for other types.
+     * @param array<string, mixed> $member_card   Group directories' Group Member card, the card of a
+     *                                            group's member list; see member_card_defaults().
+     *                                            Defaults for other types.
+     * @param list<Facet>          $member_facets Group directories' member list facets (data fields
+     *                                            on people), in display order. Empty for other types.
      */
     private function __construct(
         public readonly DirectoryType $type,
@@ -137,6 +149,8 @@ final class DirectoryConfig
         public readonly array $facets,
         public readonly int $cache_version,
         public readonly array $roster,
+        public readonly array $member_card,
+        public readonly array $member_facets,
     ) {}
 
     /**
@@ -148,7 +162,7 @@ final class DirectoryConfig
      */
     public static function defaults(DirectoryType $type = DirectoryType::Individual): self
     {
-        return new self($type, self::eligibility_defaults(), self::card_defaults($type), [], 0, self::roster_defaults());
+        return new self($type, self::eligibility_defaults(), self::card_defaults($type), [], 0, self::roster_defaults(), self::member_card_defaults(), []);
     }
 
     /**
@@ -181,12 +195,13 @@ final class DirectoryConfig
      * validated, and anything missing or invalid falls back to its default.
      *
      * Pass the stored config as $previous when saving an edit. Then:
-     * - a type change resets the card, the facets and the membership tiers to
-     *   the new type's defaults (tiers are typed, so old ones would be invisible
-     *   in the admin yet still filter the directory);
+     * - a type change resets the card, the facets, the Group Member card and
+     *   its facets, and the membership tiers to the new type's defaults (tiers
+     *   are typed, so old ones would be invisible in the admin yet still
+     *   filter the directory);
      * - eligibility keys that don't apply to the type are always reset (see
-     *   sanitize_eligibility()), with or without $previous; so is the roster
-     *   of a type other than group;
+     *   sanitize_eligibility()), with or without $previous; so are the roster,
+     *   the Group Member card and its facets of a type other than group;
      * - cache_version is the previous one plus one.
      *
      * Without $previous the result depends only on $input, so sanitize() is
@@ -210,13 +225,22 @@ final class DirectoryConfig
             $type
         );
 
+        $member_card = self::member_card_defaults();
+        $member_facets = [];
+
         if ($type_changed) {
             $eligibility['membership_ids'] = [];
             $card = self::card_defaults($type);
             $facets = [];
         } else {
-            $card = self::sanitize_card(is_array($input['card'] ?? null) ? $input['card'] : [], $type);
+            $card = self::sanitize_card(is_array($input['card'] ?? null) ? $input['card'] : [], self::card_defaults($type));
             $facets = self::sanitize_facets($input['facets'] ?? null, $type);
+
+            // Members are people: their card is the individual one plus the group fields, their facets a person's.
+            if ($type === DirectoryType::Group) {
+                $member_card = self::sanitize_card(is_array($input['member_card'] ?? null) ? $input['member_card'] : [], $member_card);
+                $member_facets = self::sanitize_facets($input['member_facets'] ?? null, DirectoryType::Individual);
+            }
         }
 
         $cache_version = $previous !== null
@@ -225,13 +249,13 @@ final class DirectoryConfig
 
         $roster = self::sanitize_roster(is_array($input['roster'] ?? null) ? $input['roster'] : [], $type);
 
-        return new self($type, $eligibility, $card, $facets, $cache_version, $roster);
+        return new self($type, $eligibility, $card, $facets, $cache_version, $roster, $member_card, $member_facets);
     }
 
     /**
      * The config as stored in post meta.
      *
-     * @return array{type: string, eligibility: Eligibility, card: array<string, mixed>, facets: list<Facet>, roster: Roster, cache_version: int}
+     * @return array{type: string, eligibility: Eligibility, card: array<string, mixed>, facets: list<Facet>, member_card: array<string, mixed>, member_facets: list<Facet>, roster: Roster, cache_version: int}
      */
     public function to_array(): array
     {
@@ -240,6 +264,8 @@ final class DirectoryConfig
             'eligibility'   => $this->eligibility,
             'card'          => $this->card,
             'facets'        => $this->facets,
+            'member_card'   => $this->member_card,
+            'member_facets' => $this->member_facets,
             'roster'        => $this->roster,
             'cache_version' => $this->cache_version,
         ];
@@ -256,24 +282,33 @@ final class DirectoryConfig
     }
 
     /**
-     * The card a group's member list shows: the individual card.
+     * The card a group's member list shows: the Group Member card.
      *
-     * Until the Group Member card has a config of its own (phase 2 ticket
-     * P2.4), it is the individual card's defaults without contact details:
-     * name and job title. The roster is public, and nobody has chosen which
-     * of a member's contact records it may show.
+     * The same as the `member_card` property; kept because the member list
+     * read it through this method before the card had a config (P2.3).
      *
-     * @return array<string, mixed> Card toggles, in the individual card's shape.
+     * @return array<string, mixed> Card toggles: the individual card's keys plus MEMBERSHIP_FIELDS.
      */
     public function member_card(): array
     {
-        $card = self::card_defaults(DirectoryType::Individual);
+        return $this->member_card;
+    }
 
-        foreach (self::CONTACT_FIELDS as $field) {
-            $card[$field]['show'] = false;
+    /**
+     * Whether the Group Member card shows any field from the person's row in
+     * the group, so the member list needs the `group_members` batch.
+     *
+     * @return bool
+     */
+    public function shows_membership(): bool
+    {
+        foreach (self::MEMBERSHIP_FIELDS as $key) {
+            if ($this->member_card[$key] === true) {
+                return true;
+            }
         }
 
-        return $card;
+        return false;
     }
 
     /**
@@ -400,6 +435,27 @@ final class DirectoryConfig
     }
 
     /**
+     * Default Group Member card: the individual card plus the group fields.
+     *
+     * The person's fields keep the individual defaults (name and job title),
+     * but every contact detail starts off: a member list is public, and its
+     * admin chooses which of a member's contact records it may show. The
+     * group fields (role, in-group status, start and end date) start on.
+     *
+     * @return array<string, mixed>
+     */
+    private static function member_card_defaults(): array
+    {
+        $card = self::card_defaults(DirectoryType::Individual);
+
+        foreach (self::CONTACT_FIELDS as $field) {
+            $card[$field]['show'] = false;
+        }
+
+        return array_fill_keys(self::MEMBERSHIP_FIELDS, true) + $card;
+    }
+
+    /**
      * A contact rule with the prototype's default flags (no type, no flags).
      *
      * @param bool $show Whether the field is shown on the card.
@@ -511,18 +567,18 @@ final class DirectoryConfig
     }
 
     /**
-     * Sanitize the card against the type's default keys.
+     * Sanitize a card against its default keys.
      *
-     * @param array<mixed>  $input Raw card.
-     * @param DirectoryType $type  Directory type.
+     * @param array<mixed>         $input    Raw card.
+     * @param array<string, mixed> $defaults The card's defaults: card_defaults() or member_card_defaults().
      *
      * @return array<string, mixed>
      */
-    private static function sanitize_card(array $input, DirectoryType $type): array
+    private static function sanitize_card(array $input, array $defaults): array
     {
         $card = [];
 
-        foreach (self::card_defaults($type) as $key => $default) {
+        foreach ($defaults as $key => $default) {
             $value = $input[$key] ?? null;
 
             $card[$key] = match (true) {
