@@ -6,6 +6,7 @@ namespace Wicket\Directory;
 
 use Wicket\Directory\Admin\DirectoryMetaBoxes;
 use Wicket\Directory\Admin\ListColumns;
+use Wicket\Directory\Api\DirectoryCache;
 use Wicket\Directory\Block\DirectoryBlock;
 use Wicket\Directory\PostType\DirectoryPostType;
 
@@ -75,6 +76,7 @@ final class Plugin
 
         (new DirectoryPostType())->register();
         (new DirectoryBlock())->register();
+        (new DirectoryCache())->register();
 
         if (is_admin()) {
             (new DirectoryMetaBoxes())->register();

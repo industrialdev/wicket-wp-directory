@@ -149,6 +149,16 @@ final class EnumLabels
     }
 
     /**
+     * The start of every label transient name, whatever its format or language.
+     *
+     * @return string
+     */
+    public static function transient_prefix(): string
+    {
+        return DirectoryRepository::TRANSIENT_PREFIX . 'labels_';
+    }
+
+    /**
      * The transient name for a language's label maps.
      *
      * @param string $lang Two-letter language code.
@@ -157,7 +167,7 @@ final class EnumLabels
      */
     public static function transient_name(string $lang): string
     {
-        return DirectoryRepository::TRANSIENT_PREFIX . 'labels_' . self::LABELS_CACHE_FORMAT . '_' . $lang;
+        return self::transient_prefix() . self::LABELS_CACHE_FORMAT . '_' . $lang;
     }
 
     /**

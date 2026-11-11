@@ -77,6 +77,9 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
       → Admin\ResourceTypes      (landed) one GET resource_types: org types, group types and contact record types (ContactResolver::RELATIONSHIPS)
       → Admin\SchemaFields       (landed) GET json_schemas?include=json_schema_resources: the type's text/list data fields, with an enum flag (none for groups)
       → Admin\Groups             (landed) one groups/query (2000, sorted name_{lang}): every group for the exclude picker; loaded for saved group directories only
+    Api\DirectoryCache           (landed) save_post_wicket_directory (priority 20, after the settings save) and before_delete_post → purge(ID):
+                                 deletes the directory's `wicket_directory_{ID}_*` transients and the `wicket_directory_labels_*` ones. Under a
+                                 persistent object cache: label transients by name per known language; results expire (their keys already changed)
     Admin\ListColumns            (landed, admin only) Type and Status columns after Title on All Directories; non-published rows say "Not shown on the site"
     Block\DirectoryBlock         (landed) dynamic block `wicket/directory` registered from build/directory (built from blocks/directory); adds the `wicket` category if missing;
                                  render_callback → DirectoryRenderer; enqueue_style() puts directory.css in the <head> of a post that has the block;

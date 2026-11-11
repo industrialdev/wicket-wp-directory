@@ -38,8 +38,8 @@ final class DirectoryRepository
     public const CACHE_TTL = 600;
 
     /**
-     * Transient name prefix. The rest is an md5 hash, so names stay well under
-     * the 172-character limit.
+     * Transient name prefix. A directory's entries add its ID and an md5 hash
+     * (see transient_prefix()), so names stay well under the 172-character limit.
      */
     public const TRANSIENT_PREFIX = 'wicket_directory_';
 
@@ -628,7 +628,7 @@ final class DirectoryRepository
     {
         $group = strtolower(trim($group));
         $ttl = $this->cache_ttl($directory, $config);
-        $key = self::TRANSIENT_PREFIX . md5(serialize([
+        $key = self::transient_prefix($directory->ID) . md5(serialize([
             self::CACHE_FORMAT,
             'active_people',
             $directory->ID,
@@ -709,6 +709,20 @@ final class DirectoryRepository
     }
 
     /**
+     * The start of every transient name that holds one directory's results.
+     *
+     * The trailing underscore keeps directory 1's names apart from directory 12's.
+     *
+     * @param int $directory_id The directory post ID.
+     *
+     * @return string
+     */
+    public static function transient_prefix(int $directory_id): string
+    {
+        return self::TRANSIENT_PREFIX . $directory_id . '_';
+    }
+
+    /**
      * The cache lifetime for a directory.
      *
      * @param WP_Post         $directory The directory post.
@@ -739,8 +753,9 @@ final class DirectoryRepository
      * query (filter, sort, page, includes, after the query_args filters). It
      * also covers the whole stored config and the post's modified date, so
      * every save invalidates the directory's cache, even one that writes the
-     * meta without bumping cache_version (REST, code) or changes nothing. Old
-     * entries aren't deleted; they expire with their TTL.
+     * meta without bumping cache_version (REST, code) or changes nothing. The
+     * name starts with transient_prefix(), so DirectoryCache can delete a
+     * directory's old entries when it is saved; otherwise they expire with their TTL.
      *
      * @param WP_Post         $directory The directory post.
      * @param DirectoryConfig $config    The directory's config.
@@ -751,7 +766,7 @@ final class DirectoryRepository
      */
     private static function cache_key(WP_Post $directory, DirectoryConfig $config, DirectoryQuery $query, string $lang): string
     {
-        return self::TRANSIENT_PREFIX . md5(serialize([
+        return self::transient_prefix($directory->ID) . md5(serialize([
             self::CACHE_FORMAT,
             $directory->ID,
             $config->cache_version,
