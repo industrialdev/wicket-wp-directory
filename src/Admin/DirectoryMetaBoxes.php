@@ -45,7 +45,7 @@ final class DirectoryMetaBoxes
      * Config sections the box posts. Each one replaces the stored section as
      * a whole, so every field of a section must have a control.
      */
-    public const SECTIONS = ['type', 'eligibility', 'card', 'facets'];
+    public const SECTIONS = ['type', 'eligibility', 'card', 'facets', 'roster'];
 
     /**
      * Script handle for the edit screen.
@@ -161,7 +161,8 @@ final class DirectoryMetaBoxes
     }
 
     /**
-     * Print the Directory panels: type and eligibility.
+     * Print the Directory panels: type, eligibility and, for groups, the
+     * member list (Default View, its group, Group Member Status).
      *
      * Tiers are listed for the stored type only. A type change clears them on
      * save, so the box asks the admin to save before choosing new ones. The
@@ -206,6 +207,18 @@ final class DirectoryMetaBoxes
             /* translators: %s: Group UUID. */
             'groups'            => self::with_saved($groups, $config->eligibility['excluded_groups'], __('Unknown group (%s)', 'wicket-directory')),
             'groups_failed'     => $is_group && $this->groups->failed($lang),
+            'views'             => [
+                DirectoryConfig::VIEW_GROUPS         => __('Group List', 'wicket-directory'),
+                DirectoryConfig::VIEW_MEMBERS        => __('Group Members', 'wicket-directory'),
+                DirectoryConfig::VIEW_GROUPS_MEMBERS => __('Group List + Member List', 'wicket-directory'),
+            ],
+            /* translators: %s: Group UUID. */
+            'roster_groups'     => self::with_saved($groups, array_filter([$config->roster['group']]), __('Unknown group (%s)', 'wicket-directory')),
+            'member_statuses'   => [
+                DirectoryConfig::MEMBER_STATUS_ACTIVE   => __('Active', 'wicket-directory'),
+                DirectoryConfig::MEMBER_STATUS_INACTIVE => __('Inactive', 'wicket-directory'),
+                DirectoryConfig::MEMBER_STATUS_ALL      => __('All', 'wicket-directory'),
+            ],
         ]);
     }
 
@@ -502,7 +515,7 @@ final class DirectoryMetaBoxes
                     ],
                     'view_members' => [
                         'label'       => __('View Members button', 'wicket-directory'),
-                        'description' => __('Links to the group\'s member list. When off, the card has no way to reach it.', 'wicket-directory'),
+                        'description' => __('Opens the group\'s member list. Shown only in the Group List + Member List view; when off, the card has no way to reach it.', 'wicket-directory'),
                     ],
                 ],
                 'refs'     => [],

@@ -47,8 +47,9 @@ final class GroupEntry extends Entry
      *                                                  `description_en`. Plain text with line breaks.
      * @param int|null                $member_count     Distinct active members; null when the card hides it.
      * @param string                  $members_url      The group's member list (the View Members button);
-     *                                                  '' hides the button. Empty until the roster lands
-     *                                                  (P2.3); a filter can set it.
+     *                                                  '' hides the button. Set when the card shows the
+     *                                                  button and the Default View has a member list;
+     *                                                  a filter can change it.
      * @param array<array-key, mixed> $extra            Free-form data for custom templates.
      */
     public function __construct(

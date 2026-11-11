@@ -293,6 +293,23 @@ final class EnumLabels
     }
 
     /**
+     * Labels for group member roles (`group_members.type`, the
+     * `group_members_resource_type_slug_in` values).
+     *
+     * A member list matches its keyword against these, so a visitor can find
+     * a group's chair by typing "chair".
+     *
+     * @param string $lang Two-letter language code.
+     *
+     * @return array<string, string> Slug => `name_{lang}`, else `name`, else `name_en`, else the slug,
+     *                               in API order.
+     */
+    public function group_member_roles(string $lang): array
+    {
+        return $this->resource_type_labels('group_members', $lang);
+    }
+
+    /**
      * Labels for one list of `GET resource_types`.
      *
      * @param string $resource_type The list's `resource_type`, e.g. `groups`.

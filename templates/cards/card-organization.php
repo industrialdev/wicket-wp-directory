@@ -34,8 +34,10 @@ defined('ABSPATH') || exit;
 
 $entry = $args['entry'];
 
-$website_label = $args['config']->card['website_label'] !== ''
-    ? $args['config']->card['website_label']
+// The card toggles of this listing: a member list's aren't the group directory's.
+$card = $args['card'] ?? $args['config']->card;
+$website_label = $card['website_label'] !== ''
+    ? $card['website_label']
     : __('Visit Website', 'wicket-directory');
 
 // Words in the collapsed description. Comparing with one word more tells

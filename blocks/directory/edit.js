@@ -24,6 +24,11 @@ const POST_TYPE = 'wicket_directory';
 const MIN_RESULTS = 1;
 const MAX_RESULTS = 50;
 
+// A group directory's Default View (DirectoryConfig::VIEWS).
+const VIEW_GROUPS = 'groups';
+const VIEW_MEMBERS = 'members';
+const VIEW_GROUPS_MEMBERS = 'groups_members';
+
 /**
  * Sort options per directory type, printed by DirectoryBlock::editor_data()
  * from DirectoryType::sort_options(), so the tokens and labels match the
@@ -38,10 +43,11 @@ const SORT_OPTIONS = window.wicketDirectoryEditor?.sortOptions ?? {};
  *
  * `context: 'view'` because the default `edit` context needs manage_options
  * for this post type, and editors who place the block aren't admins. The
- * directory type comes from the `directory_type` REST field, since the config
- * meta is edit-context only.
+ * directory type and a group directory's Default View come from the
+ * `directory_type` and `directory_view` REST fields, since the config meta is
+ * edit-context only.
  *
- * @return {{directories: Array<{id: number, title: string, type: string}>, isResolving: boolean, hasError: boolean}} Directories and the request state.
+ * @return {{directories: Array<{id: number, title: string, type: string, view: ?string}>, isResolving: boolean, hasError: boolean}} Directories and the request state.
  */
 function usePublishedDirectories() {
 	const { records, isResolving, status } = useEntityRecords(
@@ -53,7 +59,7 @@ function usePublishedDirectories() {
 			orderby: 'title',
 			order: 'asc',
 			context: 'view',
-			_fields: [ 'id', 'title', 'directory_type' ],
+			_fields: [ 'id', 'title', 'directory_type', 'directory_view' ],
 		}
 	);
 
@@ -67,6 +73,7 @@ function usePublishedDirectories() {
 				record.id
 			),
 		type: record.directory_type,
+		view: record.directory_view ?? null,
 	} ) );
 
 	const hasError = status === 'ERROR';
@@ -140,6 +147,8 @@ export default function Edit( { attributes, setAttributes } ) {
 		hideFilters,
 		hideOrderBy,
 		collapseRefineOnMobile,
+		rosterResultsPerPage,
+		collapseRosterRefineOnMobile,
 	} = attributes;
 
 	const blockProps = useBlockProps();
@@ -151,16 +160,25 @@ export default function Edit( { attributes, setAttributes } ) {
 	const isUnavailable =
 		directoryId > 0 && ! isResolving && ! hasError && ! selected;
 
+	// A group directory shows its group list, one group's members, or both.
+	const isGroup = selected?.type === 'group';
+	const view = isGroup ? selected.view ?? VIEW_GROUPS_MEMBERS : null;
+	const showsMembers = isGroup && view !== VIEW_GROUPS;
+	const separateMembers = isGroup && view === VIEW_GROUPS_MEMBERS;
+
+	// In the Group Members view the directory lists people, so it sorts like one.
+	const listType = view === VIEW_MEMBERS ? 'individual' : selected?.type;
+
 	// An unknown or other-type defaultSort shows (and renders as) the type's default.
-	const sortOptions = SORT_OPTIONS[ selected?.type ] ?? [];
+	const sortOptions = SORT_OPTIONS[ listType ] ?? [];
 	const sortValue = sortOptions.some(
 		( option ) => option.value === defaultSort
 	)
 		? defaultSort
 		: sortOptions[ 0 ]?.value;
 
-	// Group directories have no location search (DirectoryType::has_location()).
-	const hasLocation = selected?.type !== 'group';
+	// Groups have no location search (DirectoryType::has_location()); their members do.
+	const hasLocation = ! isGroup || showsMembers;
 
 	// Sort tokens are per type, so a new directory starts on its type's default.
 	const selectDirectory = ( id ) =>
@@ -178,6 +196,17 @@ export default function Edit( { attributes, setAttributes } ) {
 				),
 			} );
 		}
+	};
+
+	// Reset (undefined) goes back to 0: the member list uses the group list's number.
+	const setRosterResultsPerPage = ( value ) => {
+		const number = parseInt( value, 10 );
+
+		setAttributes( {
+			rosterResultsPerPage: Number.isNaN( number )
+				? 0
+				: Math.min( MAX_RESULTS, Math.max( MIN_RESULTS, number ) ),
+		} );
 	};
 
 	const picker = isResolving ? (
@@ -264,6 +293,14 @@ export default function Edit( { attributes, setAttributes } ) {
 								'Hide Location Search',
 								'wicket-directory'
 							) }
+							help={
+								separateMembers
+									? __(
+											'Location search is on member lists only.',
+											'wicket-directory'
+									  )
+									: undefined
+							}
 							checked={ hideLocation }
 							onChange={ ( value ) =>
 								setAttributes( { hideLocation: value } )
@@ -299,6 +336,50 @@ export default function Edit( { attributes, setAttributes } ) {
 						}
 					/>
 				</PanelBody>
+				{ separateMembers && (
+					<PanelBody
+						title={ __( 'Member List', 'wicket-directory' ) }
+					>
+						<p>
+							{ __(
+								'A group’s member list opens from its View Members button. The settings above also apply to it, and it sorts by first name unless a visitor picks another order.',
+								'wicket-directory'
+							) }
+						</p>
+						<RangeControl
+							__next40pxDefaultSize
+							__nextHasNoMarginBottom
+							label={ __(
+								'Number of Members to Display',
+								'wicket-directory'
+							) }
+							help={ __(
+								'Reset to use the number of results above.',
+								'wicket-directory'
+							) }
+							min={ MIN_RESULTS }
+							max={ MAX_RESULTS }
+							step={ 1 }
+							value={ rosterResultsPerPage || resultsPerPage }
+							allowReset
+							onChange={ setRosterResultsPerPage }
+						/>
+						<ToggleControl
+							__nextHasNoMarginBottom
+							label={ __(
+								'Collapse Refine Results by default on mobile/tablet',
+								'wicket-directory'
+							) }
+							checked={ collapseRosterRefineOnMobile }
+							disabled={ hideFilters }
+							onChange={ ( value ) =>
+								setAttributes( {
+									collapseRosterRefineOnMobile: value,
+								} )
+							}
+						/>
+					</PanelBody>
+				) }
 			</InspectorControls>
 
 			<div { ...blockProps }>

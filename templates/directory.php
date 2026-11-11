@@ -5,11 +5,22 @@
  * Override it by copying it to `{theme}/wicket-directory/directory.php`. Each
  * part (`parts/…`) and card (`cards/…`) can be overridden the same way.
  *
+ * A group's member list renders through this template too. Then `roster` is
+ * set (the group, and the Back to Directory link when there is a group list
+ * to go back to), `type` is Individual (members are people), and `params`,
+ * `card` and `facets` are the member list's own. Parts and cards read those,
+ * not `config`'s. The header part comes before the form.
+ *
  * Entries hold raw values; templates escape everything they print.
  *
  * @var array{
  *     directory: WP_Post,
  *     config: Wicket\Directory\Config\DirectoryConfig,
+ *     type: Wicket\Directory\Config\DirectoryType,
+ *     card: array<string, mixed>,
+ *     facets: list<array{source: string, schema_key: string, field: string, label: string}>,
+ *     collapse_refine: bool,
+ *     roster: array{group: Wicket\Directory\Data\GroupEntry, back_url: string}|null,
  *     attributes: Wicket\Directory\Block\BlockAttributes,
  *     params: Wicket\Directory\Query\RequestParams,
  *     page: Wicket\Directory\Api\ResultPage,
@@ -32,10 +43,15 @@ declare(strict_types=1);
 defined('ABSPATH') || exit;
 
 $templates = $args['templates'];
+$roster = $args['roster'] ?? null;
 $classes = [
     'wicket-directory',
     'wicket-directory--' . $args['config']->type->value,
 ];
+
+if ($roster !== null) {
+    $classes[] = 'wicket-directory--roster';
+}
 
 if ($args['show_filters']) {
     $classes[] = 'wicket-directory--has-filters';
@@ -48,6 +64,10 @@ if (!$args['wicket_theme']) {
 }
 ?>
 <div id="<?php echo esc_attr($args['html_id']); ?>" class="<?php echo esc_attr(implode(' ', $classes)); ?>">
+	<?php if ($roster !== null) : ?>
+		<?php $templates->load('parts/roster-header', $args); ?>
+	<?php endif; ?>
+
 	<form class="wicket-directory__form" method="get">
 		<?php foreach ($args['hidden_fields'] as $field) : ?>
 			<input type="hidden" name="<?php echo esc_attr($field['name']); ?>" value="<?php echo esc_attr($field['value']); ?>">

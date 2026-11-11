@@ -48,6 +48,11 @@ final class BlockAttributes
      * @param bool   $hide_filters              Hide the Refine Results panel; facet params are ignored.
      * @param bool   $hide_order_by             Hide Order by; the sort param is ignored.
      * @param bool   $collapse_refine_on_mobile The Refine Results panel starts collapsed on mobile and tablet.
+     * @param int    $roster_results_per_page   A group's member list page size, when the directory shows
+     *                                          both the group list and member lists; 0 uses
+     *                                          $results_per_page. Read it through roster_per_page().
+     * @param bool   $collapse_roster_refine_on_mobile The member list's Refine Results panel starts
+     *                                          collapsed on mobile and tablet (same views as above).
      */
     private function __construct(
         public readonly int $directory_id,
@@ -58,6 +63,8 @@ final class BlockAttributes
         public readonly bool $hide_filters,
         public readonly bool $hide_order_by,
         public readonly bool $collapse_refine_on_mobile,
+        public readonly int $roster_results_per_page = 0,
+        public readonly bool $collapse_roster_refine_on_mobile = false,
     ) {}
 
     /**
@@ -72,6 +79,7 @@ final class BlockAttributes
     public static function from_array(array $attributes): self
     {
         $per_page = self::int($attributes['resultsPerPage'] ?? null) ?? self::DEFAULT_RESULTS_PER_PAGE;
+        $roster_per_page = self::int($attributes['rosterResultsPerPage'] ?? null) ?? 0;
         $sort = $attributes['defaultSort'] ?? '';
 
         return new self(
@@ -83,7 +91,20 @@ final class BlockAttributes
             self::bool($attributes['hideFilters'] ?? null),
             self::bool($attributes['hideOrderBy'] ?? null),
             self::bool($attributes['collapseRefineOnMobile'] ?? null),
+            // 0 (or less) means "same as the group list".
+            $roster_per_page < 1 ? 0 : min(self::MAX_RESULTS_PER_PAGE, $roster_per_page),
+            self::bool($attributes['collapseRosterRefineOnMobile'] ?? null),
         );
+    }
+
+    /**
+     * A group's member list page size, when the directory also shows its group list.
+     *
+     * @return int The member list's own size, or $results_per_page when it has none.
+     */
+    public function roster_per_page(): int
+    {
+        return $this->roster_results_per_page > 0 ? $this->roster_results_per_page : $this->results_per_page;
     }
 
     /**

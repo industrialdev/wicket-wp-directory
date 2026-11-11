@@ -1,15 +1,17 @@
 <?php
 /**
- * The Directory panels: type and eligibility.
+ * The Directory panels: type, eligibility and a group directory's member list.
  *
  * Panels that depend on the type carry `data-wd-type` (one type, or several
- * separated by spaces); `assets/js/admin.js` shows them for the selected type. Elements with `data-wd-type-changed` show
+ * separated by spaces); `assets/js/admin.js` shows them for the selected type.
+ * Those that depend on the Default View carry `data-wd-view` the same way.
+ * Elements with `data-wd-type-changed` show
  * only while the selected type differs from the saved one, and
  * `data-wd-type-unchanged` ones only while it matches. Without the script the
  * panels show the saved type's settings.
  *
- * The save handler replaces the whole eligibility section with what these
- * panels post, so an emptied chip picker saves as empty. A boolean checkbox
+ * The save handler replaces the whole eligibility and roster sections with
+ * what these panels post, so an emptied chip picker saves as empty. A boolean checkbox
  * needs its hidden "0", because DirectoryConfig keeps the default for a
  * missing one.
  *
@@ -26,6 +28,9 @@
  *     group_statuses: array<string, string>,
  *     groups: array<string, string>,
  *     groups_failed: bool,
+ *     views: array<string, string>,
+ *     roster_groups: array<string, string>,
+ *     member_statuses: array<string, string>,
  * } $args
  */
 
@@ -51,6 +56,16 @@ $chip_picker = static function (array $args): void {
  */
 $hidden_unless = static fn (array $types): string => in_array($saved_type, $types, true) ? '' : 'hidden';
 $member_types = 'individual organization';
+$roster = $config->roster;
+$saved_view = $roster['default_view'];
+
+/**
+ * The `hidden` attribute for a group panel of some Default Views, when the saved directory doesn't show it.
+ *
+ * @param list<string> $views Default View values.
+ */
+$hidden_unless_view = static fn (array $views): string => $saved_type === 'group' && in_array($saved_view, $views, true) ? '' : 'hidden';
+$roster_views = Wicket\Directory\Config\DirectoryConfig::VIEW_MEMBERS . ' ' . Wicket\Directory\Config\DirectoryConfig::VIEW_GROUPS_MEMBERS;
 ?>
 <div class="wicket-directory-settings" data-wicket-directory-settings data-saved-type="<?php echo esc_attr($saved_type); ?>">
     <div class="wd-panel">
@@ -64,6 +79,45 @@ $member_types = 'individual organization';
         <div class="notice notice-warning inline" data-wd-type-changed hidden>
             <p><?php esc_html_e('The type has changed. Saving resets the card settings, the filters and the membership tiers to the new type\'s defaults.', 'wicket-directory'); ?></p>
         </div>
+    </div>
+
+    <div class="wd-panel" data-wd-type="group" <?php echo $hidden_unless(['group']); ?>>
+        <label class="wd-panel__label" for="wicket-directory-default-view"><?php esc_html_e('Default view', 'wicket-directory'); ?></label>
+        <select id="wicket-directory-default-view" class="wd-field" name="<?php echo esc_attr($field); ?>[roster][default_view]" data-wd-view-select>
+            <?php foreach ($args['views'] as $view => $label) : ?>
+                <option value="<?php echo esc_attr($view); ?>" <?php selected($saved_view, $view); ?>><?php echo esc_html($label); ?></option>
+            <?php endforeach; ?>
+        </select>
+        <p class="wd-help"><?php esc_html_e('Group List shows the groups only. Group Members shows the members of one group, chosen below. Group List + Member List shows the groups, and each card\'s View Members button opens that group\'s members on the same page, with a link back.', 'wicket-directory'); ?></p>
+    </div>
+
+    <div class="wd-panel" data-wd-type="group" data-wd-view="<?php echo esc_attr(Wicket\Directory\Config\DirectoryConfig::VIEW_MEMBERS); ?>" <?php echo $hidden_unless_view([Wicket\Directory\Config\DirectoryConfig::VIEW_MEMBERS]); ?>>
+        <label class="wd-panel__label" for="wicket-directory-roster-group"><?php esc_html_e('Group', 'wicket-directory'); ?></label>
+        <div data-wd-type-unchanged>
+            <?php if ($args['groups_failed']) : ?>
+                <div class="notice notice-error inline">
+                    <p><?php esc_html_e('Groups couldn\'t be loaded from Wicket. The saved group is kept.', 'wicket-directory'); ?></p>
+                </div>
+            <?php endif; ?>
+            <select id="wicket-directory-roster-group" class="wd-field" name="<?php echo esc_attr($field); ?>[roster][group]">
+                <option value=""><?php esc_html_e('Select a group', 'wicket-directory'); ?></option>
+                <?php foreach ($args['roster_groups'] as $uuid => $label) : ?>
+                    <option value="<?php echo esc_attr($uuid); ?>" <?php selected($roster['group'], $uuid); ?>><?php echo esc_html($label); ?></option>
+                <?php endforeach; ?>
+            </select>
+            <p class="wd-help"><?php esc_html_e('The group whose members the directory shows. Its status, type and the groups to exclude above still apply: a group the directory can\'t list isn\'t shown.', 'wicket-directory'); ?></p>
+        </div>
+        <p class="wd-help" data-wd-type-changed hidden><?php esc_html_e('Save the directory to choose the group.', 'wicket-directory'); ?></p>
+    </div>
+
+    <div class="wd-panel" data-wd-type="group" data-wd-view="<?php echo esc_attr($roster_views); ?>" <?php echo $hidden_unless_view([Wicket\Directory\Config\DirectoryConfig::VIEW_MEMBERS, Wicket\Directory\Config\DirectoryConfig::VIEW_GROUPS_MEMBERS]); ?>>
+        <label class="wd-panel__label" for="wicket-directory-member-status"><?php esc_html_e('Group member status', 'wicket-directory'); ?></label>
+        <select id="wicket-directory-member-status" class="wd-field" name="<?php echo esc_attr($field); ?>[roster][member_status]">
+            <?php foreach ($args['member_statuses'] as $status => $label) : ?>
+                <option value="<?php echo esc_attr($status); ?>" <?php selected($roster['member_status'], $status); ?>><?php echo esc_html($label); ?></option>
+            <?php endforeach; ?>
+        </select>
+        <p class="wd-help"><?php esc_html_e('Which members a group\'s member list shows. Inactive lists people whose terms in the group have all ended. The card\'s active member count always counts active members.', 'wicket-directory'); ?></p>
     </div>
 
     <div class="wd-panel" data-wd-type="group" <?php echo $hidden_unless(['group']); ?>>

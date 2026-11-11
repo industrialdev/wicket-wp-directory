@@ -53,7 +53,7 @@ final class PersonQueryBuilder extends QueryBuilder
 
         // Keyword and location are separate OR groups, ANDed with each other.
         $groups = array_values(array_filter([
-            $this->keyword_group($params->keyword),
+            self::keyword_group($params->keyword),
             $this->location_group($params->location),
         ]));
 
@@ -82,6 +82,21 @@ final class PersonQueryBuilder extends QueryBuilder
      */
     protected function sort_key(string $token, string $lang): string
     {
+        return self::person_sort_key($token);
+    }
+
+    /**
+     * The `people/query` sort key for an individual sort token.
+     *
+     * Shared with RosterQueryBuilder: a member list sorts on person keys
+     * only (sorting on the group member join is an HTTP 500).
+     *
+     * @param string $token One of DirectoryType::Individual->sort_options().
+     *
+     * @return string
+     */
+    public static function person_sort_key(string $token): string
+    {
         return match ($token) {
             'first_name_desc' => '-given_name',
             'last_name_asc'   => 'family_name',
@@ -95,12 +110,13 @@ final class PersonQueryBuilder extends QueryBuilder
      *
      * `identifying_number_eq` lets a visitor find a member by member ID; it's
      * the reason this is a `g` group rather than a Ransack attribute combinator.
+     * RosterQueryBuilder adds the matching group roles to the same group.
      *
      * @param string $keyword Keyword search, or ''.
      *
      * @return array<string, string>|null Null when there is no keyword.
      */
-    private function keyword_group(string $keyword): ?array
+    public static function keyword_group(string $keyword): ?array
     {
         if ($keyword === '') {
             return null;

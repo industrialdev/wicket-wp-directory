@@ -8,12 +8,15 @@
  * the same `component-search-form` classes; `directory.css` unwraps
  * `search-form` so the row reads [keyword] [location] [Search]. With keyword
  * search hidden, a `button` component is the Search button. With both hidden
- * there's nothing to search, so the row isn't rendered.
+ * there's nothing to search, so the row isn't rendered. A group's member list
+ * searches people, so it has the location field and matches roles too.
  *
  * Override it at `{theme}/wicket-directory/parts/search-bar.php`.
  *
  * @var array{
  *     config: Wicket\Directory\Config\DirectoryConfig,
+ *     type?: Wicket\Directory\Config\DirectoryType,
+ *     roster?: array<string, mixed>|null,
  *     attributes: Wicket\Directory\Block\BlockAttributes,
  *     params: Wicket\Directory\Query\RequestParams,
  * } $args Plus the rest of `directory.php`'s args.
@@ -25,8 +28,10 @@ defined('ABSPATH') || exit;
 
 $attributes = $args['attributes'];
 $params = $args['params'];
+// What is listed: a member list lists people.
+$type = $args['type'] ?? $args['config']->type;
 
-$show_location = !$attributes->hide_location && $args['config']->type->has_location();
+$show_location = !$attributes->hide_location && $type->has_location();
 
 if ($attributes->hide_keyword && !$show_location) {
     return;
@@ -34,8 +39,10 @@ if ($attributes->hide_keyword && !$show_location) {
 
 $keyword_param = $params->param('keyword');
 $location_param = $params->param('location');
-$keyword_placeholder = match ($args['config']->type) {
-    Wicket\Directory\Config\DirectoryType::Individual   => __('Search by name, member ID', 'wicket-directory'),
+$keyword_placeholder = match ($type) {
+    Wicket\Directory\Config\DirectoryType::Individual   => ($args['roster'] ?? null) !== null
+        ? __('Search by name, member ID or role', 'wicket-directory')
+        : __('Search by name, member ID', 'wicket-directory'),
     Wicket\Directory\Config\DirectoryType::Organization => __('Search by organization', 'wicket-directory'),
     Wicket\Directory\Config\DirectoryType::Group        => __('Search by group name', 'wicket-directory'),
 };

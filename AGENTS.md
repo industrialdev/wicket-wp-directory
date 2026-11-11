@@ -4,8 +4,8 @@ Wicket Directory adds configurable public directories of **Individuals** and **O
 
 > **Status: in development (scaffold landed).** The approved plan is `docs/engineering/mvp-plan.md`. Read it before writing code; it is the source of truth for scope, data model and decisions. Classes and paths below are the planned layout unless marked as landed. Update this file as they land.
 
-MVP scope: Individual and Organization directories only. Phase 2 (`docs/engineering/phase-2-tickets.md`) is under way: the Group directory type landed in P2.1 (config, query builder, eligibility, data, admin) and its card in P2.2. These are still deferred, so don't build them without being asked:
-- group rosters (P2.3, P2.4), including the link behind the group card's View Members button
+MVP scope: Individual and Organization directories only. Phase 2 (`docs/engineering/phase-2-tickets.md`) is under way: the Group directory type landed in P2.1 (config, query builder, eligibility, data, admin), its card in P2.2, and group member lists (Default View, View Members, Back to Directory) in P2.3. These are still deferred, so don't build them without being asked:
+- the Group Member card with its own card config and facets (P2.4); until then a member list uses the individual card without contact details and has no facets
 - Organization Contact (Membership Owner / Relationship Types)
 - the Developer panel UI
 - the `[col]/{{field}}` merge-tag card editor
@@ -47,15 +47,19 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
   Plugin::get_instance()         (landed) singleton; plugin_setup() on plugins_loaded:100 (after the base plugin's :99 setup); text domain
     DirectoryPostType            (landed) CPT `wicket_directory` (caps → manage_options, classic editor; menu icon = assets/images/menu-icon.svg as a base64
                                  data URI, one root `fill` so svg-painter can recolour it) + `_wicket_directory_config` post meta (REST `edit` context only)
-                                 + read-only `directory_type` REST field (`view` context), so the block editor knows each directory's type
+                                 + read-only `directory_type` and `directory_view` REST fields (`view` context), so the block editor knows each
+                                 directory's type and a group directory's Default View
       → Config\DirectoryConfig   (landed) typed config: defaults(type), from_post(post), sanitize(input, ?previous), to_array(); Config\DirectoryType enum
                                  (individual | organization | group; has_location() is false for groups). Every type stores every eligibility key; keys
-                                 that don't apply keep their defaults (groups: no tiers/opt-in; others: no group_status/group_types/excluded_groups)
+                                 that don't apply keep their defaults (groups: no tiers/opt-in; others: no group_status/group_types/excluded_groups).
+                                 `roster` section (P2.3; defaults for non-groups): default_view groups | members | groups_members (default), group (UUID,
+                                 Group Members view), member_status active | inactive | all; has_roster(); member_card() = individual card, contacts off
     Admin\DirectoryMetaBoxes     (landed, admin only) one "Directory settings" meta box (render_box → views/settings.php); posts `wicket_directory[...]`;
                                  save_post handler lays the posted SECTIONS (`type`, `eligibility`, `card`, `facets`) over the stored config
                                  → DirectoryConfig::sanitize(…, previous) (nonce, manage_options + edit_post). Directory panels on top (views/directory.php:
                                  type select, chip pickers for tiers/org types, active-members, opt-in; for groups: Group status, group types, groups to exclude.
-                                 `data-wd-type` takes space-separated types), then tabs Card View (views/card.php; one checklist in
+                                 `data-wd-type` takes space-separated types; Default view, Group and Group member status panels use `data-wd-view` too),
+                                 then tabs Card View (views/card.php; one checklist in
                                  card_groups(type) order, card_fields(type) lists its controls; ticked items reveal their options) and Filters
                                  (views/filters.php; facet_choices(type, schemas) = org type + enum data fields, or group type only; a hidden `facets` marker lets "no rows" save;
                                  searchable picker); views/chip-picker.php is the shared multi-select. Data-field pickers post "schema_key.field".
@@ -70,8 +74,10 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
                                  render_callback → DirectoryRenderer; enqueue_style() puts directory.css in the <head> of a post that has the block;
                                  enqueue_editor_data() prints window.wicketDirectoryEditor.sortOptions (DirectoryType::sort_options() per type) before the editor script
       blocks/directory/edit.js   (landed) sidebar (published directories via useEntityRecords, context view), Placeholder, ServerSideRender in <Disabled>, unpublished-selection Notice;
-                                 no Hide Location toggle for group directories
-      → Block\BlockAttributes    (landed) from_array(attributes): sanitized, resultsPerPage clamped 1–50; sort(DirectoryType) resolves defaultSort
+                                 Hide Location only where people are listed; person sorts in the Group Members view; Member List panel (rosterResultsPerPage,
+                                 collapseRosterRefineOnMobile) in the Group List + Member List view
+      → Block\BlockAttributes    (landed) from_array(attributes): sanitized, resultsPerPage clamped 1–50; sort(DirectoryType) resolves defaultSort;
+                                 roster_per_page() = rosterResultsPerPage, or resultsPerPage when 0
 ```
 
 Namespace `Wicket\Directory\` → `src/`. Text domain `wicket-directory`.
@@ -83,6 +89,12 @@ Block render_callback / ServerSideRender
   → Block\BlockAttributes (landed; sanitize, clamp; sort(type) → type default for an invalid defaultSort)
   → Render\DirectoryRenderer   (landed) render(BlockAttributes)
       → load directory post (missing/trashed/not `publish` → '' for visitors; parts/notice.php in the editor preview)
+      → group directory with member lists (has_roster()): the group is roster.group (Group Members view) or wd{ID}_group (Group List +
+          Member List); DirectoryRepository::group() guards it (not found → the list, or a notice in the Group Members view), then
+          render_roster(): RequestParams::for_roster() (wd{ID}m_ prefix, person sorts) → before_render → fetch_roster()
+          (Query\RosterQueryBuilder: people/query + group_members_group_uuid_eq + member status; Inactive = uuid_not_in the group's
+          active people; keyword ORs matching role slugs) → EntryMapper::map_members() (PersonEntry, member_card()) → directory.php with
+          `roster` (GroupEntry header + back URL), `type` Individual, `card`, `facets` → parts/roster-header + cards/card-individual
       → Data\FacetOptions        (landed) for_config(config, lang) → facet key => [{value, label}] from enums; values() → RequestParams' allow-list
       → Query\RequestParams      (landed) flat GET params prefixed `wd{ID}_…`; sort tokens from DirectoryType::sort_options(); location ignored for groups
       → do_action before_render, before_render_{slug} (before the API query; echoed output comes first)
@@ -96,6 +108,7 @@ Block render_callback / ServerSideRender
           uses Data\ContactResolver (landed; static resolve(field, records, rule), the truth table)
           and Data\EnumLabels (landed; enum-key, org-type and group-type labels, one load per source per request; shared() keeps the maps in a transient per language)
       → Render\TemplateLoader (landed) templates/directory.php → parts/*, cards/card-{type} (theme overrides at {theme}/wicket-directory/{name}.php)
+          parts/roster-header (landed): Back to Directory link, group type eyebrow, h2 name, description (member lists only)
           parts/search-bar (landed): search-form + location field
           parts/filters (landed): Refine Results checkbox groups (component-filter-form__* classes), Apply Filters, Clear All → clear_url
           parts/results-header (landed): "Displaying X–Y of N" count + Order by select (submits on change; noscript Sort button)
@@ -105,7 +118,7 @@ Block render_callback / ServerSideRender
           cards/card-organization (landed): same structure; org type under the name, logo, description with Show more / Show less (Alpine) past 40 words
           cards/card-group (landed): summary row of [name + status pill (tag) / group type] and [member count + View Members button],
             side by side via @container; description with Show more / Show less; no image. The button shows only when
-            GroupEntry::$members_url is set: empty until P2.3 builds the roster link (card key view_members)
+            GroupEntry::$members_url is set: the mapper sets it in the Group List + Member List view when card key view_members is on
           assets/css/directory.css (landed) block viewStyle + editorStyle; one --wd-* token layer on .wicket-directory (theme tokens + fallbacks);
             sidebar layout via @container; --standalone modifier (no Wicket theme) styles the panel, cards and pagination itself
 ```
@@ -119,6 +132,7 @@ There is **one render path**. The frontend and the block editor preview both go 
   - `directoryId`, `defaultSort`, `resultsPerPage`
   - `hideKeyword`, `hideLocation`, `hideFilters`, `hideOrderBy`
   - `collapseRefineOnMobile`
+  - `rosterResultsPerPage`, `collapseRosterRefineOnMobile` (group member lists in the Group List + Member List view)
 - **Reuse `wicket-wp-base-plugin`** helpers and components before writing new ones:
   - API: `wicket_api_client()`
   - Schemas: `wicket_get_schema()` and `wicket_get_schemas_options()`
@@ -146,9 +160,9 @@ There is **one render path**. The frontend and the block editor preview both go 
 
 | Hook | Purpose |
 |---|---|
-| `wicket_directory/query_args`, `wicket_directory/query_args_{slug}` (filter) | (landed) Modify the API query before it runs. Gets `$args` (`filter`, `page`, `sort`, `include`), `DirectoryConfig`, `RequestParams`. `{slug}` is the directory post's slug |
+| `wicket_directory/query_args`, `wicket_directory/query_args_{slug}` (filter) | (landed) Modify the API query before it runs. Gets `$args` (`filter`, `page`, `sort`, `include`), `DirectoryConfig`, `RequestParams`. `{slug}` is the directory post's slug. A group member list's query is a `people/query`: tell it by `$params->is_roster()` |
 | `wicket_directory/entry`, `wicket_directory/entry_{slug}` (filter) | (landed) Modify one entry's data before its card renders. Gets the entry's `to_array()`, the raw API resource and `DirectoryConfig`; returns the array. Unknown keys are dropped and wrong-typed values keep the original; custom data goes under `extra` |
-| `wicket_directory/before_render`, `wicket_directory/before_render_{slug}` (action) | (landed) Runs before the API query and the listing render. Gets `DirectoryConfig`, `RequestParams`, the directory `WP_Post`. Output it prints comes before the directory. Not fired for a missing or unpublished directory |
+| `wicket_directory/before_render`, `wicket_directory/before_render_{slug}` (action) | (landed) Runs before the listing's API query and render. Gets `DirectoryConfig`, `RequestParams`, the directory `WP_Post`. Output it prints comes before the directory. Not fired for a missing or unpublished directory. For a group member list it gets the member list's params and runs after the group lookup |
 | `wicket_directory/card_template` (filter) | (landed) Swap the card template file, once per render. Gets the located absolute path (`''` when none), `DirectoryConfig`, the directory `WP_Post`. A return that isn't an existing file keeps the located one |
 | `wicket_directory/cache_ttl` (filter) | (landed) API response cache lifetime in seconds (default 600). Gets `$ttl`, `DirectoryConfig`, the directory `WP_Post`. `0` disables the cache |
 | `wicket_directory/labels_cache_ttl` (filter) | (landed) Lifetime of the per-language enum and org-type label transient that facets and cards share (default 3600). Gets `$ttl`, `$lang`. `0` disables it |

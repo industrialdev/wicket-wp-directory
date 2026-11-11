@@ -170,6 +170,26 @@
 	padding-inline-start: var(--wd-icon-space);
 }
 
+/* A group's member list: Back to Directory, then the group's type, name and description. */
+
+.wicket-directory__roster-header {
+	display: grid;
+	gap: var(--wd-space-sm);
+	margin-block-end: var(--wd-space-xl);
+}
+
+.wicket-directory .wicket-directory__roster-header > *,
+.wicket-directory .wicket-directory__roster-description > * {
+	margin-block: 0;
+}
+
+/* No theme class styles it, so it gets the card eyebrow's look everywhere. */
+.wicket-directory__roster-eyebrow {
+	color: var(--wd-accent);
+	font-size: var(--wd-font-size-label);
+	letter-spacing: var(--wd-letter-spacing);
+}
+
 /* Refine Results panel. */
 
 .wicket-directory__filters-top,
@@ -554,7 +574,7 @@
 	box-shadow: var(--wd-shadow);
 }
 
-.wicket-directory--standalone :is(.wicket-directory__filters, .wicket-directory-card) a:not(.component-button) {
+.wicket-directory--standalone :is(.wicket-directory__filters, .wicket-directory-card, .wicket-directory__roster-header) a:not(.component-button) {
 	color: var(--wd-interactive);
 }
 

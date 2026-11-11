@@ -21,6 +21,7 @@
  * @var array{
  *     entry: Wicket\Directory\Data\PersonEntry,
  *     config: Wicket\Directory\Config\DirectoryConfig,
+ *     card?: array<string, mixed>,
  * } $args Plus the rest of `directory.php`'s args.
  */
 
@@ -39,8 +40,10 @@ $title = $entry->post_nominal !== ''
     )
     : $entry->name;
 
-$website_label = $args['config']->card['website_label'] !== ''
-    ? $args['config']->card['website_label']
+// The card toggles of this listing: a member list's aren't the group directory's.
+$card = $args['card'] ?? $args['config']->card;
+$website_label = $card['website_label'] !== ''
+    ? $card['website_label']
     : __('Visit Website', 'wicket-directory');
 
 $member_id = $entry->member_id !== ''

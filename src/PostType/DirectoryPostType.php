@@ -37,6 +37,11 @@ final class DirectoryPostType
     public const TYPE_REST_FIELD = 'directory_type';
 
     /**
+     * REST field with a group directory's Default View, readable in the `view` context.
+     */
+    public const VIEW_REST_FIELD = 'directory_view';
+
+    /**
      * Hook into WordPress.
      *
      * @return void
@@ -177,19 +182,31 @@ final class DirectoryPostType
     }
 
     /**
-     * Register the `directory_type` REST field.
+     * Register the `directory_type` and `directory_view` REST fields.
      *
      * The block editor needs each directory's type for its Default Sort Order
-     * options, and lists directories in the `view` context so editors who
+     * options, and a group directory's Default View to show only the settings
+     * that apply. It lists directories in the `view` context so editors who
      * aren't admins can place the block. The config meta is edit-context only,
-     * so the type gets a read-only field of its own. Only the type is exposed:
-     * it is no more private than the title, which `view` already returns for a
-     * published directory.
+     * so these get read-only fields of their own. Only these two values are
+     * exposed: they are no more private than the title, which `view` already
+     * returns for a published directory.
      *
      * @return void
      */
     public function register_rest_fields(): void
     {
+        register_rest_field(self::POST_TYPE, self::VIEW_REST_FIELD, [
+            'get_callback' => [$this, 'get_rest_view'],
+            'schema'       => [
+                'description' => __('A group directory\'s Default View; null for other types.', 'wicket-directory'),
+                'type'        => ['string', 'null'],
+                'enum'        => [...DirectoryConfig::VIEWS, null],
+                'context'     => ['view', 'edit'],
+                'readonly'    => true,
+            ],
+        ]);
+
         register_rest_field(self::POST_TYPE, self::TYPE_REST_FIELD, [
             'get_callback' => [$this, 'get_rest_type'],
             'schema'       => [
@@ -215,6 +232,21 @@ final class DirectoryPostType
 
         // get_post(0) falls back to the global post, so don't ask for it.
         return $id > 0 ? DirectoryConfig::from_post($id)?->type->value : null;
+    }
+
+    /**
+     * Value of the `directory_view` REST field.
+     *
+     * @param array<string, mixed> $data Prepared post data; `id` is the post ID.
+     *
+     * @return string|null One of DirectoryConfig::VIEWS for a group directory; null otherwise.
+     */
+    public function get_rest_view(array $data): ?string
+    {
+        $id = (int) ($data['id'] ?? 0);
+        $config = $id > 0 ? DirectoryConfig::from_post($id) : null;
+
+        return $config?->type === DirectoryType::Group ? $config->roster['default_view'] : null;
     }
 
     /**
@@ -250,6 +282,7 @@ final class DirectoryPostType
                     'type'  => 'array',
                     'items' => $open_object,
                 ],
+                'roster'        => $open_object,
                 'cache_version' => [
                     'type'    => 'integer',
                     'minimum' => 0,

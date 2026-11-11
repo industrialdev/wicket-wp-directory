@@ -14,6 +14,9 @@
  * after five options and the live selected count. Without Alpine the panel is
  * open, every option shows, and the JS-only controls stay hidden (`x-cloak`).
  *
+ * A group's member list has its own collapse setting, passed as
+ * `collapse_refine`.
+ *
  * With `collapseRefineOnMobile`, the panel is printed collapsed, so a phone
  * doesn't show it open until Alpine starts. Alpine's `:class` then owns the
  * class. `directory.css` opens it again when the browser runs no scripts. The
@@ -24,6 +27,8 @@
  * @var array{
  *     config: Wicket\Directory\Config\DirectoryConfig,
  *     attributes: Wicket\Directory\Block\BlockAttributes,
+ *     collapse_refine?: bool,
+ *     facets?: list<array{source: string, schema_key: string, field: string, label: string}>,
  *     params: Wicket\Directory\Query\RequestParams,
  *     facet_options: array<string, list<array{value: string, label: string}>>,
  *     clear_url: string,
@@ -42,7 +47,8 @@ $params = $args['params'];
 $panel_id = $args['html_id'] . '-filters';
 $facets = [];
 
-foreach ($args['config']->facets as $facet) {
+// The facets of this listing: a member list has its own.
+foreach ($args['facets'] ?? $args['config']->facets as $facet) {
     $key = Wicket\Directory\Query\RequestParams::facet_key($facet);
     $options = $args['facet_options'][$key] ?? [];
 
@@ -80,7 +86,7 @@ if ($facets === []) {
 
 // The theme's `lg` breakpoint: below it the panel collapses. The whole top bar
 // toggles it; its button gives keyboard focus and state, and clicks bubble up.
-$collapse = $args['attributes']->collapse_refine_on_mobile;
+$collapse = $args['collapse_refine'] ?? $args['attributes']->collapse_refine_on_mobile;
 $show_filters = $collapse
     ? "!window.matchMedia('(max-width: 1023.98px)').matches"
     : 'true';

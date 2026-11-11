@@ -1,11 +1,15 @@
 /**
- * Directory edit screen: show the settings that fit the selected type.
+ * Directory edit screen: show the settings that fit the selected type and,
+ * for groups, the selected Default View.
  *
- * The type select lives in the Directory panels (`data-saved-type`); the
- * elements it toggles can be anywhere in the settings box:
+ * The type select lives in the Directory panels (`data-saved-type`), as does
+ * the Default View select (`data-wd-view-select`); the elements they toggle
+ * can be anywhere in the settings box:
  *
  * - `[data-wd-type="…"]` shows only for that type, or those types when it
  *   lists several separated by spaces.
+ * - `[data-wd-view="…"]` shows only for that Default View (or views), on top
+ *   of its `data-wd-type`.
  * - `[data-wd-type-changed]` shows only while the selected type differs from
  *   the saved one; `[data-wd-type-unchanged]` only while it matches.
  *
@@ -21,6 +25,7 @@
 
 	const savedType = box.dataset.savedType;
 	const select = box.querySelector( 'select[name$="[type]"]' );
+	const viewSelect = box.querySelector( '[data-wd-view-select]' );
 
 	const toggle = ( selector, hide ) => {
 		document.querySelectorAll( selector ).forEach( ( el ) => {
@@ -28,18 +33,26 @@
 		} );
 	};
 
+	const lists = ( value, item ) => value.split( ' ' ).includes( item );
+
 	const update = () => {
 		const type = select ? select.value : savedType;
+		const view = viewSelect ? viewSelect.value : '';
 
 		toggle(
-			'[data-wd-type]',
-			( el ) => ! el.dataset.wdType.split( ' ' ).includes( type )
+			'[data-wd-type], [data-wd-view]',
+			( el ) =>
+				( el.dataset.wdType !== undefined &&
+					! lists( el.dataset.wdType, type ) ) ||
+				( el.dataset.wdView !== undefined &&
+					! lists( el.dataset.wdView, view ) )
 		);
 		toggle( '[data-wd-type-changed]', () => type === savedType );
 		toggle( '[data-wd-type-unchanged]', () => type !== savedType );
 	};
 
 	select?.addEventListener( 'change', update );
+	viewSelect?.addEventListener( 'change', update );
 
 	update();
 } )();

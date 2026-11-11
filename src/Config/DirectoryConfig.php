@@ -23,6 +23,7 @@ use WP_Post;
  * @phpstan-type OptIn array{schema_key: string, field: string, value: string|bool}
  * @phpstan-type Eligibility array{require_active_membership: bool, membership_ids: list<string>, org_types: list<string>, opt_in: OptIn|null, group_status: string, group_types: list<string>, excluded_groups: list<string>}
  * @phpstan-type Facet array{source: string, schema_key: string, field: string, label: string}
+ * @phpstan-type Roster array{default_view: string, group: string, member_status: string}
  */
 final class DirectoryConfig
 {
@@ -77,6 +78,47 @@ final class DirectoryConfig
     public const GROUP_STATUSES = [self::GROUP_STATUS_ACTIVE, self::GROUP_STATUS_INACTIVE, self::GROUP_STATUS_ALL];
 
     /**
+     * Default View: the group list only; there is no member list.
+     */
+    public const VIEW_GROUPS = 'groups';
+
+    /**
+     * Default View: one chosen group's member list (roster.group), and no group list.
+     */
+    public const VIEW_MEMBERS = 'members';
+
+    /**
+     * Default View: the group list, whose View Members buttons open a group's
+     * member list on the same page, with a Back to Directory link (the default).
+     */
+    public const VIEW_GROUPS_MEMBERS = 'groups_members';
+
+    /**
+     * Allowed values of roster.default_view.
+     */
+    public const VIEWS = [self::VIEW_GROUPS_MEMBERS, self::VIEW_GROUPS, self::VIEW_MEMBERS];
+
+    /**
+     * Group Member Status: members with an active term in the group (the default).
+     */
+    public const MEMBER_STATUS_ACTIVE = 'active';
+
+    /**
+     * Group Member Status: people whose terms in the group have all ended.
+     */
+    public const MEMBER_STATUS_INACTIVE = 'inactive';
+
+    /**
+     * Group Member Status: everyone who has ever been in the group.
+     */
+    public const MEMBER_STATUS_ALL = 'all';
+
+    /**
+     * Allowed values of roster.member_status.
+     */
+    public const MEMBER_STATUSES = [self::MEMBER_STATUS_ACTIVE, self::MEMBER_STATUS_INACTIVE, self::MEMBER_STATUS_ALL];
+
+    /**
      * Use defaults(), from_post() or sanitize().
      *
      * @param DirectoryType        $type          What the directory lists.
@@ -84,6 +126,9 @@ final class DirectoryConfig
      * @param array<string, mixed> $card          Card toggles for $type; see card_defaults().
      * @param list<Facet>          $facets        Filters the directory offers, in display order.
      * @param int                  $cache_version Bumped on every save to invalidate cached results.
+     * @param Roster               $roster        Group directories' member list: the Default View, the
+     *                                            group it shows in the Group Members view, and the
+     *                                            Group Member Status. Defaults for other types.
      */
     private function __construct(
         public readonly DirectoryType $type,
@@ -91,6 +136,7 @@ final class DirectoryConfig
         public readonly array $card,
         public readonly array $facets,
         public readonly int $cache_version,
+        public readonly array $roster,
     ) {}
 
     /**
@@ -102,7 +148,7 @@ final class DirectoryConfig
      */
     public static function defaults(DirectoryType $type = DirectoryType::Individual): self
     {
-        return new self($type, self::eligibility_defaults(), self::card_defaults($type), [], 0);
+        return new self($type, self::eligibility_defaults(), self::card_defaults($type), [], 0, self::roster_defaults());
     }
 
     /**
@@ -139,7 +185,8 @@ final class DirectoryConfig
      *   the new type's defaults (tiers are typed, so old ones would be invisible
      *   in the admin yet still filter the directory);
      * - eligibility keys that don't apply to the type are always reset (see
-     *   sanitize_eligibility()), with or without $previous;
+     *   sanitize_eligibility()), with or without $previous; so is the roster
+     *   of a type other than group;
      * - cache_version is the previous one plus one.
      *
      * Without $previous the result depends only on $input, so sanitize() is
@@ -176,13 +223,15 @@ final class DirectoryConfig
             ? $previous->cache_version + 1
             : self::non_negative_int($input['cache_version'] ?? null);
 
-        return new self($type, $eligibility, $card, $facets, $cache_version);
+        $roster = self::sanitize_roster(is_array($input['roster'] ?? null) ? $input['roster'] : [], $type);
+
+        return new self($type, $eligibility, $card, $facets, $cache_version, $roster);
     }
 
     /**
      * The config as stored in post meta.
      *
-     * @return array{type: string, eligibility: Eligibility, card: array<string, mixed>, facets: list<Facet>, cache_version: int}
+     * @return array{type: string, eligibility: Eligibility, card: array<string, mixed>, facets: list<Facet>, roster: Roster, cache_version: int}
      */
     public function to_array(): array
     {
@@ -191,8 +240,40 @@ final class DirectoryConfig
             'eligibility'   => $this->eligibility,
             'card'          => $this->card,
             'facets'        => $this->facets,
+            'roster'        => $this->roster,
             'cache_version' => $this->cache_version,
         ];
+    }
+
+    /**
+     * Whether visitors can reach a group's member list from this directory.
+     *
+     * @return bool True for a group directory whose Default View has a member list.
+     */
+    public function has_roster(): bool
+    {
+        return $this->type === DirectoryType::Group && $this->roster['default_view'] !== self::VIEW_GROUPS;
+    }
+
+    /**
+     * The card a group's member list shows: the individual card.
+     *
+     * Until the Group Member card has a config of its own (phase 2 ticket
+     * P2.4), it is the individual card's defaults without contact details:
+     * name and job title. The roster is public, and nobody has chosen which
+     * of a member's contact records it may show.
+     *
+     * @return array<string, mixed> Card toggles, in the individual card's shape.
+     */
+    public function member_card(): array
+    {
+        $card = self::card_defaults(DirectoryType::Individual);
+
+        foreach (self::CONTACT_FIELDS as $field) {
+            $card[$field]['show'] = false;
+        }
+
+        return $card;
     }
 
     /**
@@ -214,6 +295,53 @@ final class DirectoryConfig
             'group_status'              => self::GROUP_STATUS_ACTIVE,
             'group_types'               => [],
             'excluded_groups'           => [],
+        ];
+    }
+
+    /**
+     * Default roster: the group list with View Members, active members only.
+     *
+     * Every type stores it, so the shape never depends on the type.
+     *
+     * @return Roster
+     */
+    private static function roster_defaults(): array
+    {
+        return [
+            'default_view'  => self::VIEW_GROUPS_MEMBERS,
+            'group'         => '',
+            'member_status' => self::MEMBER_STATUS_ACTIVE,
+        ];
+    }
+
+    /**
+     * Sanitize the roster for a type. Only group directories have one; other
+     * types keep the defaults.
+     *
+     * The group is kept in every view, so switching back to Group Members
+     * finds it again; only the Group Members view reads it.
+     *
+     * @param array<mixed>  $input Raw roster.
+     * @param DirectoryType $type  Directory type.
+     *
+     * @return Roster
+     */
+    private static function sanitize_roster(array $input, DirectoryType $type): array
+    {
+        $defaults = self::roster_defaults();
+
+        if ($type !== DirectoryType::Group) {
+            return $defaults;
+        }
+
+        $view = $input['default_view'] ?? null;
+        $status = $input['member_status'] ?? null;
+        $group = self::uuid_list([$input['group'] ?? null]);
+
+        return [
+            'default_view'  => in_array($view, self::VIEWS, true) ? $view : $defaults['default_view'],
+            'group'         => $group[0] ?? '',
+            'member_status' => in_array($status, self::MEMBER_STATUSES, true) ? $status : $defaults['member_status'],
         ];
     }
 

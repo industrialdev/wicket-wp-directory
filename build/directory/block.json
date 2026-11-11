@@ -5,7 +5,7 @@
   "title": "Wicket Directory",
   "category": "wicket",
   "icon": "groups",
-  "description": "A searchable directory of individuals or organizations from Wicket.",
+  "description": "A searchable directory of individuals, organizations or groups from Wicket.",
   "keywords": [
     "directory",
     "members",
@@ -43,6 +43,14 @@
       "default": false
     },
     "collapseRefineOnMobile": {
+      "type": "boolean",
+      "default": false
+    },
+    "rosterResultsPerPage": {
+      "type": "integer",
+      "default": 0
+    },
+    "collapseRosterRefineOnMobile": {
       "type": "boolean",
       "default": false
     }

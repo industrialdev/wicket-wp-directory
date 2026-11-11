@@ -47,10 +47,13 @@ final class EntryMapper
      *                                the fields.
      * @param string          $slug   The directory post's slug, for the entry_{slug} filter.
      * @param string|null     $lang   Two-letter language code. Defaults to wicket_get_current_language().
+     * @param (callable(string): string)|null $members_url Builds a group's member list URL from its UUID,
+     *                                                     for the View Members button. Null leaves the
+     *                                                     button off (no member list to reach).
      *
      * @return list<PersonEntry>|list<OrganizationEntry>|list<GroupEntry> One entry per item, in order.
      */
-    public function map(ResultPage $page, DirectoryConfig $config, string $slug = '', ?string $lang = null): array
+    public function map(ResultPage $page, DirectoryConfig $config, string $slug = '', ?string $lang = null, ?callable $members_url = null): array
     {
         if ($page->is_empty()) {
             return [];
@@ -62,9 +65,9 @@ final class EntryMapper
 
         foreach ($page->items as $item) {
             $entry = match ($config->type) {
-                DirectoryType::Individual   => $this->person($item, $response, $page, $config, $lang),
-                DirectoryType::Organization => $this->organization($item, $response, $page, $config, $lang),
-                DirectoryType::Group        => $this->group($item, $page, $config, $lang),
+                DirectoryType::Individual   => $this->person($item, $response, $page, $config->card, $lang),
+                DirectoryType::Organization => $this->organization($item, $response, $page, $config->card, $lang),
+                DirectoryType::Group        => $this->group($item, $page, $config, $lang, $members_url),
             };
 
             $entries[] = $this->apply_filters($entry, $item, $config, $slug);
@@ -74,19 +77,88 @@ final class EntryMapper
     }
 
     /**
+     * Map a page of a group's member list.
+     *
+     * Members are people, so they map to PersonEntry with the directory's
+     * member card (DirectoryConfig::member_card()). The entry filters get the
+     * group directory's config, as for its group cards.
+     *
+     * @param ResultPage      $page   A page from DirectoryRepository::fetch_roster().
+     * @param DirectoryConfig $config The group directory's config.
+     * @param string          $slug   The directory post's slug, for the entry_{slug} filter.
+     * @param string|null     $lang   Two-letter language code. Defaults to wicket_get_current_language().
+     *
+     * @return list<PersonEntry> One entry per person, in order.
+     */
+    public function map_members(ResultPage $page, DirectoryConfig $config, string $slug = '', ?string $lang = null): array
+    {
+        if ($page->is_empty()) {
+            return [];
+        }
+
+        $lang = QueryBuilder::language($lang ?? wicket_get_current_language());
+        $response = new ResponseHelper(['data' => $page->items, 'included' => $page->included]);
+        $card = $config->member_card();
+        $entries = [];
+
+        foreach ($page->items as $item) {
+            $entries[] = $this->apply_filters($this->person($item, $response, $page, $card, $lang), $item, $config, $slug);
+        }
+
+        return $entries;
+    }
+
+    /**
+     * The group a member list belongs to, for its header.
+     *
+     * The header always shows the name, the type and the description, so the
+     * card toggles don't apply, and the entry filters don't run: this isn't a
+     * card. Status and member count are left empty.
+     *
+     * @param array<string, mixed> $group `groups` resource, from DirectoryRepository::group().
+     * @param string|null          $lang  Two-letter language code. Defaults to wicket_get_current_language().
+     *
+     * @return GroupEntry
+     */
+    public function roster_group(array $group, ?string $lang = null): GroupEntry
+    {
+        $lang = QueryBuilder::language($lang ?? wicket_get_current_language());
+        $attributes = self::attributes($group);
+        $group_type = self::text($attributes['type'] ?? null);
+
+        return new GroupEntry(
+            id: self::text($group['id'] ?? null),
+            name: self::localized($attributes, 'name', $lang),
+            member_id: '',
+            tiers: [],
+            addresses: [],
+            emails: [],
+            phones: [],
+            websites: [],
+            image_url: '',
+            eyebrow: '',
+            tags: [],
+            status: '',
+            group_type: $group_type,
+            group_type_label: $group_type !== '' ? ($this->labels->group_types($lang)[$group_type] ?? $group_type) : '',
+            description: self::localized($attributes, 'description', $lang),
+            member_count: null,
+        );
+    }
+
+    /**
      * Build an individual's entry.
      *
      * @param array<string, mixed> $item     `people` resource.
      * @param ResponseHelper       $response The page, for included records.
      * @param ResultPage           $page     The page, for tiers.
-     * @param DirectoryConfig      $config   The directory's config.
+     * @param array<string, mixed> $card     The individual card's toggles.
      * @param string               $lang     Language code.
      *
      * @return PersonEntry
      */
-    private function person(array $item, ResponseHelper $response, ResultPage $page, DirectoryConfig $config, string $lang): PersonEntry
+    private function person(array $item, ResponseHelper $response, ResultPage $page, array $card, string $lang): PersonEntry
     {
-        $card = $config->card;
         $attributes = self::attributes($item);
 
         $salutation = $card['salutation'] ? self::text($attributes['honorific_prefix'] ?? null) : '';
@@ -100,7 +172,7 @@ final class EntryMapper
             : self::text($attributes['full_name'] ?? null);
 
         return new PersonEntry(
-            ...$this->shared_values($item, $attributes, $response, $page, $config, $lang, $card['profile_image']),
+            ...$this->shared_values($item, $attributes, $response, $page, $card, $lang, $card['profile_image']),
             name: $name,
             salutation: $salutation,
             given_name: $given_name,
@@ -118,19 +190,18 @@ final class EntryMapper
      * @param array<string, mixed> $item     `organizations` resource.
      * @param ResponseHelper       $response The page, for included records.
      * @param ResultPage           $page     The page, for tiers.
-     * @param DirectoryConfig      $config   The directory's config.
+     * @param array<string, mixed> $card     The organization card's toggles.
      * @param string               $lang     Language code.
      *
      * @return OrganizationEntry
      */
-    private function organization(array $item, ResponseHelper $response, ResultPage $page, DirectoryConfig $config, string $lang): OrganizationEntry
+    private function organization(array $item, ResponseHelper $response, ResultPage $page, array $card, string $lang): OrganizationEntry
     {
-        $card = $config->card;
         $attributes = self::attributes($item);
         $org_type = $card['org_type'] ? self::text($attributes['type'] ?? null) : '';
 
         return new OrganizationEntry(
-            ...$this->shared_values($item, $attributes, $response, $page, $config, $lang, $card['logo']),
+            ...$this->shared_values($item, $attributes, $response, $page, $card, $lang, $card['logo']),
             name: self::localized($attributes, 'legal_name', $lang),
             org_type: $org_type,
             org_type_label: $org_type !== '' ? ($this->labels->org_types($lang)[$org_type] ?? $org_type) : '',
@@ -143,15 +214,18 @@ final class EntryMapper
      *
      * The member count is the page's distinct-people count when it has one,
      * else the group's `active_member_count` (which counts active rows).
+     * The View Members link is set when the card shows the button and the
+     * directory has a member list to reach (a $members_url builder).
      *
-     * @param array<string, mixed> $item   `groups` resource.
-     * @param ResultPage           $page   The page, for member counts.
-     * @param DirectoryConfig      $config The directory's config.
-     * @param string               $lang   Language code.
+     * @param array<string, mixed>            $item        `groups` resource.
+     * @param ResultPage                      $page        The page, for member counts.
+     * @param DirectoryConfig                 $config      The directory's config.
+     * @param string                          $lang        Language code.
+     * @param (callable(string): string)|null $members_url Builds a member list URL from a group UUID.
      *
      * @return GroupEntry
      */
-    private function group(array $item, ResultPage $page, DirectoryConfig $config, string $lang): GroupEntry
+    private function group(array $item, ResultPage $page, DirectoryConfig $config, string $lang, ?callable $members_url): GroupEntry
     {
         $card = $config->card;
         $attributes = self::attributes($item);
@@ -187,8 +261,7 @@ final class EntryMapper
             group_type_label: $group_type !== '' ? ($this->labels->group_types($lang)[$group_type] ?? $group_type) : '',
             description: $card['description'] ? self::localized($attributes, 'description', $lang) : '',
             member_count: $member_count,
-            // The roster (P2.3) builds this when the card's view_members is on.
-            members_url: '',
+            members_url: $members_url !== null && $card['view_members'] && $id !== '' ? (string) $members_url($id) : '',
         );
     }
 
@@ -199,7 +272,7 @@ final class EntryMapper
      * @param array<string, mixed> $attributes Its attributes.
      * @param ResponseHelper       $response   The page, for included records.
      * @param ResultPage           $page       The page, for tiers.
-     * @param DirectoryConfig      $config     The directory's config.
+     * @param array<string, mixed> $card       The card's toggles.
      * @param string               $lang       Language code.
      * @param DataFieldRef         $image_ref  The data field holding the profile image or logo URL.
      *
@@ -210,11 +283,10 @@ final class EntryMapper
         array $attributes,
         ResponseHelper $response,
         ResultPage $page,
-        DirectoryConfig $config,
+        array $card,
         string $lang,
         array $image_ref,
     ): array {
-        $card = $config->card;
         $id = self::text($item['id'] ?? null);
         $contacts = [];
 

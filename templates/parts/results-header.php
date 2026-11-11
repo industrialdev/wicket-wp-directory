@@ -13,6 +13,7 @@
  *
  * @var array{
  *     config: Wicket\Directory\Config\DirectoryConfig,
+ *     type?: Wicket\Directory\Config\DirectoryType,
  *     attributes: Wicket\Directory\Block\BlockAttributes,
  *     params: Wicket\Directory\Query\RequestParams,
  *     page: Wicket\Directory\Api\ResultPage,
@@ -47,7 +48,7 @@ $count = sprintf(
 			<label for="<?php echo esc_attr($sort_param); ?>" class="wicket-directory__sort-label"><?php esc_html_e('Order by', 'wicket-directory'); ?></label>
 			<select id="<?php echo esc_attr($sort_param); ?>" name="<?php echo esc_attr($sort_param); ?>" class="wicket-directory__sort-select"
 				onchange="this.form.submit()">
-				<?php foreach ($args['config']->type->sort_options() as $token => $label) : ?>
+				<?php foreach (($args['type'] ?? $args['config']->type)->sort_options() as $token => $label) : ?>
 					<option value="<?php echo esc_attr($token); ?>"<?php echo $token === $params->sort ? ' selected' : ''; ?>><?php echo esc_html($label); ?></option>
 				<?php endforeach; ?>
 			</select>

@@ -14,6 +14,7 @@ use Wicket\Directory\Query\GroupQueryBuilder;
 use Wicket\Directory\Query\OrganizationQueryBuilder;
 use Wicket\Directory\Query\PersonQueryBuilder;
 use Wicket\Directory\Query\RequestParams;
+use Wicket\Directory\Query\RosterQueryBuilder;
 use WP_Post;
 
 /**
@@ -65,6 +66,13 @@ final class DirectoryRepository
     public const MEMBER_COUNT_PAGE_SIZE = 2000;
 
     /**
+     * Page size of the active-people lookup for an Inactive member list:
+     * the MDP's cap. A group with more active member rows than this can't
+     * list its inactive members; the list shows as unavailable.
+     */
+    public const ACTIVE_PEOPLE_PAGE_SIZE = 2000;
+
+    /**
      * Returns the API client.
      *
      * @var Closure(): mixed
@@ -114,6 +122,105 @@ final class DirectoryRepository
             return ResultPage::empty($per_page, true);
         }
 
+        return $this->load($directory, $config, $query, $per_page, $lang, function (object $client, ResultPage $page) use ($directory, $config, $lang): array {
+            $cacheable = true;
+
+            if (($config->card['membership_tier'] ?? false) === true) {
+                try {
+                    $page = $page->with_tiers($this->tiers($client, $config, $page->items, $lang));
+                } catch (Throwable $e) {
+                    // Show the results without tiers, but don't cache them, so the next visit retries.
+                    $this->log_error($directory, 'Directory tier lookup failed: ' . $e->getMessage());
+                    $cacheable = false;
+                }
+            }
+
+            if ($config->type === DirectoryType::Group && ($config->card['member_count'] ?? false) === true) {
+                try {
+                    $page = $page->with_member_counts($this->member_counts($client, $page->items));
+                } catch (Throwable $e) {
+                    // The cards fall back to active_member_count; don't cache, so the next visit retries.
+                    $this->log_error($directory, 'Directory group member count failed: ' . $e->getMessage());
+                    $cacheable = false;
+                }
+            }
+
+            return [$page, $cacheable];
+        });
+    }
+
+    /**
+     * Fetch one page of a group's member list (the roster).
+     *
+     * The group must already have been looked up with group(): this query
+     * only joins people to the group's member rows (RosterQueryBuilder).
+     * Group Member Status Inactive first asks for the group's active people
+     * (one `group_members/query`, cached like a page), to leave them out.
+     * Pages are cached and fall back to the last page like fetch()'s.
+     *
+     * @param WP_Post               $directory   The directory post.
+     * @param DirectoryConfig       $config      The group directory's config.
+     * @param string                $group       The group's UUID.
+     * @param RequestParams         $params      The member list's params (RequestParams::for_roster()).
+     * @param int                   $per_page    Page size; clamped to 1–50.
+     * @param array<string, string> $role_labels Role slug => label in the current language, for the
+     *                                           keyword (EnumLabels::group_member_roles()).
+     * @param string|null           $lang        Two-letter language code. Defaults to wicket_get_current_language().
+     *
+     * @return ResultPage A page of `people` resources.
+     */
+    public function fetch_roster(
+        WP_Post $directory,
+        DirectoryConfig $config,
+        string $group,
+        RequestParams $params,
+        int $per_page,
+        array $role_labels = [],
+        ?string $lang = null,
+    ): ResultPage {
+        try {
+            $lang ??= (string) wicket_get_current_language();
+            $active_people = null;
+
+            if ($config->roster['member_status'] === DirectoryConfig::MEMBER_STATUS_INACTIVE) {
+                $active_people = $this->active_people($directory, $config, $group);
+            }
+
+            $builder = new RosterQueryBuilder($group, RosterQueryBuilder::matching_roles($params->keyword, $role_labels), $active_people);
+            $query = $builder->build($config, $params, $per_page, $directory->post_name, $lang);
+        } catch (Throwable $e) {
+            $this->log_error($directory, 'Could not build the member list query: ' . $e->getMessage());
+
+            return ResultPage::empty($per_page, true);
+        }
+
+        // The member card shows no tiers or counts yet (phase 2 ticket P2.4 adds its fields).
+        return $this->load($directory, $config, $query, $per_page, $lang);
+    }
+
+    /**
+     * Run a built query: cache lookup, the API request, the last-page
+     * fallback, extra lookups, then the cache write.
+     *
+     * @param WP_Post                                                     $directory The directory post.
+     * @param DirectoryConfig                                             $config    The directory's config.
+     * @param DirectoryQuery                                              $query     The built query.
+     * @param int                                                         $per_page  Requested page size.
+     * @param string                                                      $lang      Language code.
+     * @param (Closure(object, ResultPage): array{ResultPage, bool})|null $decorate Adds batch lookups to a
+     *                                                                               non-empty page. Returns the
+     *                                                                               page and whether to cache it.
+     *
+     * @return ResultPage
+     */
+    private function load(
+        WP_Post $directory,
+        DirectoryConfig $config,
+        DirectoryQuery $query,
+        int $per_page,
+        string $lang,
+        ?Closure $decorate = null,
+    ): ResultPage {
         $page_size = self::page_size($query, $per_page);
 
         if ($query->matches_nothing) {
@@ -152,24 +259,8 @@ final class DirectoryRepository
         $page = ResultPage::from_response($response, $requested, $page_size);
         $cacheable = true;
 
-        if (($config->card['membership_tier'] ?? false) === true && !$page->is_empty()) {
-            try {
-                $page = $page->with_tiers($this->tiers($client, $config, $page->items, $lang));
-            } catch (Throwable $e) {
-                // Show the results without tiers, but don't cache them, so the next visit retries.
-                $this->log_error($directory, 'Directory tier lookup failed: ' . $e->getMessage());
-                $cacheable = false;
-            }
-        }
-
-        if ($config->type === DirectoryType::Group && ($config->card['member_count'] ?? false) === true && !$page->is_empty()) {
-            try {
-                $page = $page->with_member_counts($this->member_counts($client, $page->items));
-            } catch (Throwable $e) {
-                // The cards fall back to active_member_count; don't cache, so the next visit retries.
-                $this->log_error($directory, 'Directory group member count failed: ' . $e->getMessage());
-                $cacheable = false;
-            }
+        if ($decorate !== null && !$page->is_empty()) {
+            [$page, $cacheable] = $decorate($client, $page);
         }
 
         if ($cacheable && $ttl > 0) {
@@ -405,6 +496,75 @@ final class DirectoryRepository
         }
 
         return array_map('count', $people);
+    }
+
+    /**
+     * The people with an active member row in a group, for an Inactive member list.
+     *
+     * One `group_members/query` (`group_uuid_eq` + `active_eq: true`), cached
+     * for the directory's TTL like a page of results.
+     *
+     * @param WP_Post         $directory The directory post (cache key and TTL).
+     * @param DirectoryConfig $config    The directory's config (cache key and TTL).
+     * @param string          $group     The group's UUID.
+     *
+     * @throws RuntimeException When the request fails, or the rows don't fit in one request.
+     *
+     * @return list<string> Distinct person UUIDs.
+     */
+    private function active_people(WP_Post $directory, DirectoryConfig $config, string $group): array
+    {
+        $group = strtolower(trim($group));
+        $ttl = $this->cache_ttl($directory, $config);
+        $key = self::TRANSIENT_PREFIX . md5(serialize([
+            self::CACHE_FORMAT,
+            'active_people',
+            $directory->ID,
+            $config->cache_version,
+            $directory->post_modified_gmt,
+            $group,
+        ]));
+
+        if ($ttl > 0) {
+            $cached = get_transient($key);
+
+            if (is_array($cached) && array_is_list($cached)) {
+                return array_values(array_filter($cached, 'is_string'));
+            }
+        }
+
+        $query_string = http_build_query(['page' => ['size' => self::ACTIVE_PEOPLE_PAGE_SIZE]]);
+        $response = $this->client()->post('group_members/query?' . $query_string, ['json' => ['filter' => [
+            'group_uuid_eq' => $group,
+            'active_eq'     => true,
+        ]]]);
+
+        if (!is_array($response) || !is_array($response['data'] ?? null)) {
+            throw new RuntimeException('Unexpected response from group_members/query.');
+        }
+
+        // A partial list would show active members as inactive.
+        if (self::int($response['meta']['page']['total_items'] ?? null) > count($response['data'])) {
+            throw new RuntimeException('The group has too many active member rows to list its inactive members.');
+        }
+
+        $people = [];
+
+        foreach ($response['data'] as $row) {
+            $person = is_array($row) ? ($row['relationships']['person']['data']['id'] ?? null) : null;
+
+            if (is_string($person) && $person !== '') {
+                $people[$person] = true;
+            }
+        }
+
+        $people = array_keys($people);
+
+        if ($ttl > 0) {
+            set_transient($key, $people, $ttl);
+        }
+
+        return array_map('strval', $people);
     }
 
     /**

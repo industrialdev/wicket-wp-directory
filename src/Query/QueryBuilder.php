@@ -45,7 +45,8 @@ abstract class QueryBuilder
     /**
      * Build the query for a directory request.
      *
-     * @param DirectoryConfig $config   The directory's config. Must be of this builder's type.
+     * @param DirectoryConfig $config   The directory's config. Must be of this builder's type (group,
+     *                                  for a member list).
      * @param RequestParams   $params   The visitor's sanitized choices.
      * @param int             $per_page Page size; clamped to MIN_PER_PAGE–MAX_PER_PAGE.
      * @param string          $slug     The directory post's slug, for the query_args_{slug} filter.
@@ -80,7 +81,7 @@ abstract class QueryBuilder
                 'size'   => max(self::MIN_PER_PAGE, min(self::MAX_PER_PAGE, $per_page)),
                 'number' => max(1, $params->page),
             ],
-            'sort'    => $this->sort_key($config->type->sanitize_sort($params->sort), $lang),
+            'sort'    => $this->sort_key($this->listed_type()->sanitize_sort($params->sort), $lang),
             'include' => $this->includes(),
         ];
 
@@ -97,6 +98,18 @@ abstract class QueryBuilder
      * @return DirectoryType
      */
     abstract protected function type(): DirectoryType;
+
+    /**
+     * What the query lists, which decides the valid sort tokens.
+     *
+     * The directory's own type, except for a group's member list (people).
+     *
+     * @return DirectoryType
+     */
+    protected function listed_type(): DirectoryType
+    {
+        return $this->type();
+    }
 
     /**
      * The query endpoint, e.g. `organizations/query`.
