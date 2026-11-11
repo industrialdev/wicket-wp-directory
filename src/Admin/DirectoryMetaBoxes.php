@@ -500,6 +500,10 @@ final class DirectoryMetaBoxes
                         'label'       => __('Active member count', 'wicket-directory'),
                         'description' => __('Counts each active member once. Adds one API request per page of results.', 'wicket-directory'),
                     ],
+                    'view_members' => [
+                        'label'       => __('View Members button', 'wicket-directory'),
+                        'description' => __('Links to the group\'s member list. When off, the card has no way to reach it.', 'wicket-directory'),
+                    ],
                 ],
                 'refs'     => [],
                 'contacts' => [],
@@ -542,7 +546,7 @@ final class DirectoryMetaBoxes
             DirectoryType::Group => [
                 ['status', 'group_type'],
                 ['description'],
-                ['member_count'],
+                ['member_count', 'view_members'],
             ],
         };
     }

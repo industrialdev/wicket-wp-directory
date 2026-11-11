@@ -266,6 +266,7 @@ final class DirectoryConfig
                 'group_type'   => true,
                 'description'  => true,
                 'member_count' => true,
+                'view_members' => true,
             ],
         };
     }

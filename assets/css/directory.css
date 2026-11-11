@@ -34,6 +34,7 @@
 	--wd-border-width: 1px;
 	--wd-radius: var(--card-corner-radius, 0.75rem);
 	--wd-radius-sm: var(--image-corner-radius, 0.25rem);
+	--wd-radius-pill: var(--tag-corner-radius, 999px);
 	--wd-shadow: var(--elevation-4, 0 4px 8px rgb(35 42 49 / 20%));
 	--wd-focus-ring: var(--wp--custom--box-shadow--focus, 0 0 1px 2px #0997ff);
 	/* Drawn in forced-colours mode, where the ring's shadow isn't. */
@@ -52,6 +53,7 @@
 	/* Type */
 	--wd-font-size-title: var(--heading-xs-font-size, 1.25rem);
 	--wd-font-size-label: var(--label-sm-font-size, 0.875rem);
+	--wd-font-size-small: var(--body-sm-font-size, 0.875rem);
 	--wd-letter-spacing: var(--wp--custom--letter-spacing--loose, 0.05em);
 
 	/* The sidebar layout follows the directory's width, not the viewport's. */
@@ -432,6 +434,53 @@
 	gap: var(--wd-space-sm);
 }
 
+/*
+ * Group card: a summary row of [name + status / group type] and
+ * [member count + View Members], stacked on a narrow card. The divider sits
+ * under the whole row, not under the header inside it.
+ */
+.wicket-directory-card__summary {
+	display: flex;
+	flex-direction: column;
+	gap: var(--wd-space-lg);
+}
+
+.wicket-directory-card__summary:not(:last-child) {
+	padding-block-end: var(--wd-space-lg);
+	border-block-end: var(--wd-border-width) solid var(--wd-divider);
+}
+
+.wicket-directory-card--group .wicket-directory-card__header {
+	min-width: 0;
+	padding-block-end: 0;
+	border-block-end: 0;
+}
+
+.wicket-directory-card__title-row,
+.wicket-directory-card__aside {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--wd-space-sm) var(--wd-space-md);
+}
+
+.wicket-directory-card__title-row {
+	gap: var(--wd-space-sm);
+}
+
+.wicket-directory .wicket-directory-card__title-row > *,
+.wicket-directory .wicket-directory-card__aside > * {
+	margin: 0;
+}
+
+.wicket-directory .wicket-directory-card__group-type {
+	color: var(--wd-text-muted);
+}
+
+.wicket-directory .wicket-directory-card__member-count {
+	font-weight: bold;
+}
+
 @container wd-card (min-width: 36rem) {
 	.wicket-directory .wicket-directory-card {
 		flex-direction: row;
@@ -446,6 +495,17 @@
 
 	.wicket-directory-card__columns {
 		flex-direction: row;
+	}
+
+	.wicket-directory-card__summary {
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+	}
+
+	.wicket-directory-card__aside {
+		flex: none;
+		justify-content: flex-end;
 	}
 }
 
@@ -506,6 +566,22 @@
 
 .wicket-directory--standalone .wicket-directory-card__title {
 	font-size: var(--wd-font-size-title);
+}
+
+.wicket-directory--standalone .wicket-directory-card__status {
+	display: inline-flex;
+	padding: var(--wd-space-xs) var(--wd-space-sm);
+	border: var(--wd-border-width) solid var(--wd-card-border);
+	border-radius: var(--wd-radius-pill);
+	background: var(--wd-panel-bg);
+	color: var(--wd-text);
+	font-size: var(--wd-font-size-small);
+	font-weight: bold;
+	line-height: 1;
+}
+
+.wicket-directory--standalone .wicket-directory-card__status--inactive {
+	color: var(--wd-text-muted);
 }
 
 .wicket-directory--standalone .wicket-pagination {

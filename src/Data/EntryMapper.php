@@ -187,6 +187,8 @@ final class EntryMapper
             group_type_label: $group_type !== '' ? ($this->labels->group_types($lang)[$group_type] ?? $group_type) : '',
             description: $card['description'] ? self::localized($attributes, 'description', $lang) : '',
             member_count: $member_count,
+            // The roster (P2.3) builds this when the card's view_members is on.
+            members_url: '',
         );
     }
 

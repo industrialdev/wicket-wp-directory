@@ -9,6 +9,8 @@ namespace Wicket\Directory\Data;
  *
  * Groups have no member ID, tiers, contact records, image, eyebrow or tags,
  * so those inherited values are always empty unless a filter sets them.
+ * cards/card-group shows the name, status, group type, description, member
+ * count and View Members button.
  *
  * @phpstan-import-type Phone from Entry
  */
@@ -44,6 +46,9 @@ final class GroupEntry extends Entry
      * @param string                  $description      `description_{lang}`, else `description`, else
      *                                                  `description_en`. Plain text with line breaks.
      * @param int|null                $member_count     Distinct active members; null when the card hides it.
+     * @param string                  $members_url      The group's member list (the View Members button);
+     *                                                  '' hides the button. Empty until the roster lands
+     *                                                  (P2.3); a filter can set it.
      * @param array<array-key, mixed> $extra            Free-form data for custom templates.
      */
     public function __construct(
@@ -63,6 +68,7 @@ final class GroupEntry extends Entry
         public readonly string $group_type_label,
         public readonly string $description,
         public readonly ?int $member_count,
+        public readonly string $members_url = '',
         array $extra = [],
     ) {
         parent::__construct($id, $name, $member_id, $tiers, $addresses, $emails, $phones, $websites, $image_url, $eyebrow, $tags, $extra);
@@ -79,6 +85,7 @@ final class GroupEntry extends Entry
             'group_type_label' => self::SHAPE_STRING,
             'description'      => self::SHAPE_STRING,
             'member_count'     => self::SHAPE_COUNT,
+            'members_url'      => self::SHAPE_STRING,
         ];
     }
 }

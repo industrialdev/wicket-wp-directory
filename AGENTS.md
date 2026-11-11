@@ -4,8 +4,8 @@ Wicket Directory adds configurable public directories of **Individuals** and **O
 
 > **Status: in development (scaffold landed).** The approved plan is `docs/engineering/mvp-plan.md`. Read it before writing code; it is the source of truth for scope, data model and decisions. Classes and paths below are the planned layout unless marked as landed. Update this file as they land.
 
-MVP scope: Individual and Organization directories only. Phase 2 (`docs/engineering/phase-2-tickets.md`) is under way: the Group directory type landed in P2.1 (config, query builder, eligibility, data, admin); its card template is P2.2. These are still deferred, so don't build them without being asked:
-- the group card (P2.2) and group rosters (P2.3, P2.4)
+MVP scope: Individual and Organization directories only. Phase 2 (`docs/engineering/phase-2-tickets.md`) is under way: the Group directory type landed in P2.1 (config, query builder, eligibility, data, admin) and its card in P2.2. These are still deferred, so don't build them without being asked:
+- group rosters (P2.3, P2.4), including the link behind the group card's View Members button
 - Organization Contact (Membership Owner / Relationship Types)
 - the Developer panel UI
 - the `[col]/{{field}}` merge-tag card editor
@@ -103,7 +103,9 @@ Block render_callback / ServerSideRender
           parts/no-results (landed): no-results message, or the alert component for an `unavailable` page
           cards/card-individual (landed): component-card-listing classes; details / address / contact columns; tag, button, link + icon components
           cards/card-organization (landed): same structure; org type under the name, logo, description with Show more / Show less (Alpine) past 40 words
-          cards/card-group (P2.2, not yet): until it lands, a group directory's list items render empty
+          cards/card-group (landed): summary row of [name + status pill (tag) / group type] and [member count + View Members button],
+            side by side via @container; description with Show more / Show less; no image. The button shows only when
+            GroupEntry::$members_url is set: empty until P2.3 builds the roster link (card key view_members)
           assets/css/directory.css (landed) block viewStyle + editorStyle; one --wd-* token layer on .wicket-directory (theme tokens + fallbacks);
             sidebar layout via @container; --standalone modifier (no Wicket theme) styles the panel, cards and pagination itself
 ```

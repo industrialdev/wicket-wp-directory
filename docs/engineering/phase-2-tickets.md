@@ -1,7 +1,7 @@
 ---
 title: "Phase 2 Tickets"
 audience: [developer, agent]
-updated: 2026-11-10
+updated: 2026-11-11
 ---
 
 # `wicket-wp-directory` Phase 2 tickets
@@ -20,7 +20,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 |---|---|---|---|
 | P2.0 | [API spike: groups, group members, connections and membership owner](#p20) | — | Done |
 | P2.1 | [Groups directory type: config, query builder and eligibility](#p21) | P2.0 | Done |
-| P2.2 | [Group card template](#p22) | P2.1 | To do |
+| P2.2 | [Group card template](#p22) | P2.1 | Done |
 | P2.3 | [Group roster page: Default View, Back to Directory, own search, filters, sort and paging](#p23) | P2.2 | To do |
 | P2.4 | [Group Member card, with its own card config and facets](#p24) | P2.3 | To do |
 | P2.5 | [Organization Contact on the org card (Membership Owner / Relationship Types)](#p25) | P2.0 | To do |
@@ -105,6 +105,15 @@ Add a third directory type, Group, alongside Individual and Organization.
 - Renders on the Wicket theme and on a non-Wicket theme (`--standalone` modifier).
 - Unit tests (`CardGroupTest`).
 
+**Outcome (2026-11-11):**
+
+- **Template.** `templates/cards/card-group.php`, located as `cards/card-group` and overridable at `{theme}/wicket-directory/cards/card-group.php` like the other cards. Same `component-card-listing` / `wicket-directory-card__*` classes, no image. A `__summary` row holds the header (`__title-row`: the name with the status pill beside it; then `__group-type`) and `__aside` (`__member-count`, then the View Members button). The description follows the divider, with the organization card's Show more / Show less past 40 words.
+- **Status pill.** The `tag` component, labelled Active / Inactive, with `wicket-directory-card__status--active` / `--inactive`. The Wicket theme styles it as a tag; `--standalone` gives it its own pill (`--wd-radius-pill` ← `--tag-corner-radius`, `--wd-font-size-small` ← `--body-sm-font-size`). A status a filter sets shows as given, without a modifier.
+- **Empty values.** Each row hides when its value is empty (the mapper empties what a toggle turns off), so the card never reads the toggles. A count of 0 shows ("0 active members"); `null` hides it. A group with no name is titled "Unnamed group".
+- **View Members.** New card key `view_members` (on by default) and a "View Members button" toggle beside the member count in Card View. New `GroupEntry::$members_url` (`''` hides the button; the `wicket_directory/entry` filter can set it). The button is `button` (primary, `a_tag`), with `aria-label` "View Members of {name}" because every card has one. **The mapper leaves `members_url` empty until P2.3**, so no card shows the button yet.
+- **Layout.** A container query (`wd-card`, 36rem) puts the header and the aside side by side, the aside right-aligned; a narrow card stacks them.
+- **Checked** against staging data in the local site (Wicket child theme): status, type, count and description render. Not checked visually on a non-Wicket theme.
+
 <a id="p23"></a>
 
 ### P2.3 — Group roster page: Default View, Back to Directory, own search, filters, sort and paging
@@ -121,6 +130,7 @@ View Members shows one group's members on the same page, server-rendered from GE
 - Roster keyword matches name and role. The role part matches role labels in PHP and ORs the slugs as `group_members_resource_type_slug_in`. Roster sort uses person keys only (a join sort is an HTTP 500); page size falls back to the directory's.
 - Block: roster results per page and Collapse Refine by default for the roster; settings that don't apply to the chosen Default View are hidden.
 - An inactive or excluded group can't be reached through a direct roster link.
+- The group card's View Members button: `EntryMapper` sets `GroupEntry::$members_url` to the roster link when the card's `view_members` is on (P2.2 left it empty).
 
 **Acceptance criteria:**
 
