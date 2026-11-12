@@ -1,7 +1,7 @@
 ---
 title: "MDP API Queries"
 audience: [developer, agent]
-updated: 2026-11-10
+updated: 2026-11-12
 ---
 
 # Verified MDP queries for directories
@@ -492,7 +492,7 @@ $client->post('connections/query?page%5Bsize%5D=2000&include=organization', ['js
 
 Map each row with `relationships.person.data.id` and `relationships.organization.data.id`, then read `legal_name_{lang}` from `included[type=organizations]`.
 
-**The primary organization is unverified.** People have a `primary_organization` relationship, but it's `null` for all 175 people on staging, also through `GET people/{uuid}` and with `include=primary_organization`. No stack package reads it. P2.6 has to decide whether "primary organization" is worth supporting at all (see [Phase 2 corrections](#phase-2-corrections), item 6).
+**The primary organization is unverified.** People have a `primary_organization` relationship, but it's `null` for all 175 people on staging, also through `GET people/{uuid}` and with `include=primary_organization`. No stack package reads it. P2.6 has to decide whether "primary organization" is worth supporting at all (see [Phase 2 corrections](#phase-2-corrections), item 7).
 
 ### Relationship Types contacts on the org card (P2.5)
 
@@ -528,7 +528,7 @@ $client->post('organization_memberships/query?page%5Bsize%5D=2000&include=member
 
 Verified: 23 rows for the 10 orgs with an active membership; `include=owner` → 8 people, `include=membership,owner` → 8 memberships + 8 people. `owner_uuid_in` / `owner_uuid_eq` are recognised (no-match → 0). Nested includes (`owner.emails`) return only the person, so the owner's email and phone need the same `people/query` `uuid_in` batch as the contacts above (one request for owners and contacts together).
 
-- **An org can have several active memberships with different owners** (2 of the 10 orgs on staging). P2.5 needs a rule: when the directory filters by tiers, the owner of a membership in those tiers; otherwise every distinct owner, or one (e.g. the newest `starts_at`). See [Phase 2 corrections](#phase-2-corrections), item 5.
+- **An org can have several active memberships with different owners** (2 of the 10 orgs on staging). P2.5's rule: when the directory filters by tiers, the owners of memberships in those tiers; otherwise every distinct owner, newest `starts_at` first. See [Phase 2 corrections](#phase-2-corrections), item 6.
 - `is_active_owner` was `true` on every active row, and `is_active_owner_eq` is **ignored** (73 = all rows). Don't filter on it.
 - **"Display relationship type"** (show the owner only if they have an active connection of the selected types to the org) is the connections batch above with `person_uuid_in` = the owners and `organization_uuid_in` = the page's orgs, matched per (person, org) pair in PHP. The keys are verified, but no owner on staging has an active connection to their own org (0 of 23 rows), so the positive case needs fixtures.
 
@@ -600,7 +600,7 @@ What the P2.0 spike changed in [phase-2-tickets.md](phase-2-tickets.md). The tic
 3. **The roster is a `people/query`**, joined with `group_members_group_uuid_eq` (+ `group_members_active_eq`), not `groups/{uuid}/people`. It lists each person once and keeps every MVP person filter, sort and facet. Role, in-group status and dates come from one `group_members/query` batch per roster page (first row per person by `-start_date`).
 4. **Group Member Status: Inactive** means "has rows in the group but no active row", and needs one extra request for the active people's UUIDs. `group_members_active_eq: false` would list current members who have past terms.
 5. **Roster keyword on the role** works only by matching role labels in PHP first, then ORing the slugs as `group_members_resource_type_slug_in`. Roster sort stays on person keys (a join sort is an HTTP 500).
-6. **Membership owner** is `organization_memberships.relationships.owner`, fetched with the existing tier batch (`include=owner`). An org can have several active memberships with different owners, so P2.5 needs a rule for which owner(s) to show.
+6. **Membership owner** is `organization_memberships.relationships.owner`, fetched with the existing tier batch (`include=owner`). An org can have several active memberships with different owners. P2.5 settled which to show: the configured tiers' owners when the directory filters by tiers, else every distinct owner, newest first.
 7. **Primary organization** can't be verified: `primary_organization` is null for every person on staging and nothing in the stack reads it. P2.6 should build Employer from active connections of the selected types and treat "primary organization" as an open question until a tenant with the data is found.
 8. **Contact details for owners and contacts** need a second request per page (`people/query` `uuid_in` + `include=emails,phones`), because nested includes don't work on `connections` or `organization_memberships`. That makes P2.5 two or three requests per page; still none per row.
 9. **No group data fields:** no JSON schema on staging is bound to groups, so the group list's facets are group type only. The Group Member card's facets are person data fields, as on individual directories.

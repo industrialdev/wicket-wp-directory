@@ -5,7 +5,10 @@
  * It has the same structure and `wicket-directory-card__*` classes as the
  * individual card, so one set of rules in `directory.css` styles both. The org
  * type joins the meta line (member ID | org type | membership tiers), the
- * description follows the divider, and the columns are Address and Contact.
+ * description follows the divider, and the columns are Address, Contact (the
+ * organization's own records) and Organization Contact (the people to contact:
+ * name, relationship type, job title, email and phone; the column shows only
+ * when someone qualifies).
  * The logo comes first in the markup, so it tops a narrow card; a wide card
  * shows it on the right.
  *
@@ -55,6 +58,20 @@ $member_id = $entry->member_id !== ''
 
 $has_meta = $member_id !== '' || $entry->org_type_label !== '' || $entry->tiers !== [];
 $has_contact = $entry->emails !== [] || $entry->phones !== [];
+
+/**
+ * A phone number with its extension.
+ *
+ * @param array{number: string, extension: string, uri: string} $phone Phone.
+ */
+$phone_text = static fn (array $phone): string => $phone['extension'] !== ''
+    ? sprintf(
+        /* translators: 1: phone number, 2: phone extension. */
+        __('%1$s ext. %2$s', 'wicket-directory'),
+        $phone['number'],
+        $phone['extension'],
+    )
+    : $phone['number'];
 ?>
 <article class="component-card-listing wicket-directory-card wicket-directory-card--organization">
 	<?php if ($entry->image_url !== '') : ?>
@@ -110,7 +127,7 @@ $has_contact = $entry->emails !== [] || $entry->phones !== [];
 			</div>
 		<?php endif; ?>
 
-		<?php if ($entry->addresses !== [] || $has_contact) : ?>
+		<?php if ($entry->addresses !== [] || $has_contact || $entry->contacts !== []) : ?>
 			<div class="wicket-directory-card__columns">
 				<?php if ($entry->addresses !== []) : ?>
 					<div class="wicket-directory-card__column wicket-directory-card__addresses">
@@ -136,16 +153,7 @@ $has_contact = $entry->emails !== [] || $entry->phones !== [];
 								</li>
 							<?php endforeach; ?>
 							<?php foreach ($entry->phones as $phone) : ?>
-								<?php
-					            $number = $phone['extension'] !== ''
-					                ? sprintf(
-					                    /* translators: 1: phone number, 2: phone extension. */
-					                    __('%1$s ext. %2$s', 'wicket-directory'),
-					                    $phone['number'],
-					                    $phone['extension'],
-					                )
-					                : $phone['number'];
-							    ?>
+								<?php $number = $phone_text($phone); ?>
 								<li class="wicket-directory-card__contact">
 									<span class="wicket-directory-card__contact-label"><?php esc_html_e('Phone:', 'wicket-directory'); ?></span>
 									<?php if ($phone['uri'] !== '') : ?>
@@ -158,6 +166,55 @@ $has_contact = $entry->emails !== [] || $entry->phones !== [];
 										<?php // A filter can clear the URI; show the number without a link.?>
 										<span class="wicket-directory-card__phone"><?php echo esc_html($number); ?></span>
 									<?php endif; ?>
+								</li>
+							<?php endforeach; ?>
+						</ul>
+					</div>
+				<?php endif; ?>
+
+				<?php if ($entry->contacts !== []) : ?>
+					<div class="wicket-directory-card__column wicket-directory-card__people">
+						<h4 class="wicket-directory-card__column-title"><?php echo esc_html(_n('Organization Contact', 'Organization Contacts', count($entry->contacts), 'wicket-directory')); ?></h4>
+						<ul class="wicket-directory-card__people-list">
+							<?php foreach ($entry->contacts as $person) : ?>
+								<li class="wicket-directory-card__person">
+									<?php if ($person['name'] !== '' || $person['relationship'] !== '') : ?>
+										<p class="wicket-directory-card__person-heading">
+											<?php if ($person['name'] !== '') : ?>
+												<span class="wicket-directory-card__person-name"><?php echo esc_html($person['name']); ?></span>
+											<?php endif; ?>
+											<?php if ($person['relationship'] !== '') : ?>
+												<span class="wicket-directory-card__person-relationship"><?php echo esc_html($person['relationship']); ?></span>
+											<?php endif; ?>
+										</p>
+									<?php endif; ?>
+									<?php if ($person['title'] !== '') : ?>
+										<p class="wicket-directory-card__person-title"><?php echo esc_html($person['title']); ?></p>
+									<?php endif; ?>
+									<?php foreach ($person['emails'] as $email) : ?>
+										<p class="wicket-directory-card__person-contact">
+											<span class="wicket-directory-card__contact-label"><?php esc_html_e('Email:', 'wicket-directory'); ?></span>
+											<?php get_component('link', [
+											    'url'     => esc_url('mailto:' . $email),
+											    'text'    => esc_html($email),
+											    'classes' => ['wicket-directory-card__email'],
+											]); ?>
+										</p>
+									<?php endforeach; ?>
+									<?php foreach ($person['phones'] as $phone) : ?>
+										<p class="wicket-directory-card__person-contact">
+											<span class="wicket-directory-card__contact-label"><?php esc_html_e('Phone:', 'wicket-directory'); ?></span>
+											<?php if ($phone['uri'] !== '') : ?>
+												<?php get_component('link', [
+												    'url'     => esc_url($phone['uri']),
+												    'text'    => esc_html($phone_text($phone)),
+												    'classes' => ['wicket-directory-card__phone'],
+												]); ?>
+											<?php else : ?>
+												<span class="wicket-directory-card__phone"><?php echo esc_html($phone_text($phone)); ?></span>
+											<?php endif; ?>
+										</p>
+									<?php endforeach; ?>
 								</li>
 							<?php endforeach; ?>
 						</ul>
@@ -189,8 +246,8 @@ $has_contact = $entry->emails !== [] || $entry->phones !== [];
 					<?php
                     // tag escapes its own label.
                     get_component('tag', [
-                        'label' => $tag,
-                        'link'  => '',
+					    'label' => $tag,
+					    'link'  => '',
                     ]);
 				    ?>
 				<?php endforeach; ?>

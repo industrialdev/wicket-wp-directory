@@ -246,14 +246,23 @@
 /**
  * Card View: a ticked item reveals its options. A data-field item's picker is
  * disabled while it's unticked, so the reference saves as off. A contact
- * item shows the hint for its ticked flags.
+ * item shows the hint for its ticked flags; the Organization Contact item the
+ * hint for its chosen source (`data-wd-mode` radios).
+ *
+ * Items can nest (Organization Contact holds an email and a phone rule), so
+ * each item only reads and toggles its own elements, not a nested item's.
  */
 ( function () {
 	const items = document.querySelectorAll( '[data-wd-item]' );
 
+	const own = ( item, selector ) =>
+		Array.from( item.querySelectorAll( selector ) ).filter(
+			( el ) => el.closest( '[data-wd-item]' ) === item
+		);
+
 	const reveal = ( item, focus = false ) => {
-		const on = item.querySelector( '[data-wd-reveal-toggle]' )?.checked;
-		const options = item.querySelector( '[data-wd-reveal]' );
+		const on = own( item, '[data-wd-reveal-toggle]' )[ 0 ]?.checked;
+		const options = own( item, '[data-wd-reveal]' )[ 0 ];
 
 		if ( ! options ) {
 			return;
@@ -274,12 +283,17 @@
 
 	const hint = ( item ) => {
 		const flag = ( name ) =>
-			item.querySelector( `[data-wd-flag="${ name }"]` )?.checked;
+			own( item, `[data-wd-flag="${ name }"]` )[ 0 ]?.checked;
+		const mode = own( item, '[data-wd-mode]' ).find(
+			( input ) => input.checked
+		);
 		const directory = flag( 'directory' );
 		const primary = flag( 'primary' );
 		let state = 'none';
 
-		if ( directory && primary ) {
+		if ( mode ) {
+			state = mode.value;
+		} else if ( directory && primary ) {
 			state = 'both';
 		} else if ( directory ) {
 			state = 'directory';
@@ -287,16 +301,23 @@
 			state = 'primary';
 		}
 
-		item.querySelectorAll( '[data-wd-hint]' ).forEach( ( el ) => {
+		own( item, '[data-wd-hint]' ).forEach( ( el ) => {
 			el.hidden = el.dataset.wdHint !== state;
 		} );
 	};
 
 	items.forEach( ( item ) => {
 		item.addEventListener( 'change', ( event ) => {
+			// A nested item handles its own changes.
+			if ( event.target.closest( '[data-wd-item]' ) !== item ) {
+				return;
+			}
+
 			if ( event.target.matches( '[data-wd-reveal-toggle]' ) ) {
 				reveal( item, true );
-			} else if ( event.target.matches( '[data-wd-flag]' ) ) {
+			} else if (
+				event.target.matches( '[data-wd-flag], [data-wd-mode]' )
+			) {
 				hint( item );
 			}
 		} );

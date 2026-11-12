@@ -8,6 +8,7 @@ namespace Wicket\Directory\Data;
  * An organization directory card's data.
  *
  * @phpstan-import-type Phone from Entry
+ * @phpstan-import-type Contact from Entry
  */
 final class OrganizationEntry extends Entry
 {
@@ -28,6 +29,9 @@ final class OrganizationEntry extends Entry
      * @param string                  $description    `description_{lang}`, else `description`, else
      *                                                `description_en`. Plain text with line breaks.
      * @param array<array-key, mixed> $extra          Free-form data for custom templates.
+     * @param list<Contact>           $contacts       Organization Contact: the people to contact, in
+     *                                                order, each with only what the card shows. Empty
+     *                                                when the section is off or nobody qualifies.
      */
     public function __construct(
         string $id,
@@ -45,6 +49,7 @@ final class OrganizationEntry extends Entry
         public readonly string $org_type_label,
         public readonly string $description,
         array $extra = [],
+        public readonly array $contacts = [],
     ) {
         parent::__construct($id, $name, $member_id, $tiers, $addresses, $emails, $phones, $websites, $image_url, $eyebrow, $tags, $extra);
     }
@@ -58,6 +63,7 @@ final class OrganizationEntry extends Entry
             'org_type'       => self::SHAPE_STRING,
             'org_type_label' => self::SHAPE_STRING,
             'description'    => self::SHAPE_STRING,
+            'contacts'       => self::SHAPE_CONTACTS,
         ];
     }
 }

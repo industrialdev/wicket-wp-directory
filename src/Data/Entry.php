@@ -16,6 +16,7 @@ namespace Wicket\Directory\Data;
  * its declared shape.
  *
  * @phpstan-type Phone array{number: string, extension: string, uri: string}
+ * @phpstan-type Contact array{id: string, name: string, title: string, relationship: string, emails: list<string>, phones: list<Phone>}
  */
 abstract class Entry
 {
@@ -48,6 +49,11 @@ abstract class Entry
      * Shape of a count: an integer of 0 or more, or null for "not shown".
      */
     protected const SHAPE_COUNT = 'count';
+
+    /**
+     * Shape of a list of Contact arrays (a person listed on the card).
+     */
+    protected const SHAPE_CONTACTS = 'contacts';
 
     /**
      * @param string                   $id        Person, organization or group UUID.
@@ -167,13 +173,14 @@ abstract class Entry
         }
 
         return match ($shape) {
-            self::SHAPE_STRINGS => self::strings($value),
-            self::SHAPE_LINES   => array_values(array_filter(
+            self::SHAPE_STRINGS  => self::strings($value),
+            self::SHAPE_LINES    => array_values(array_filter(
                 array_map(static fn (mixed $lines): array => is_array($lines) ? self::strings($lines) : [], $value),
                 static fn (array $lines): bool => $lines !== [],
             )),
-            self::SHAPE_PHONES  => array_values(array_filter(array_map(self::phone(...), $value))),
-            default             => $value,
+            self::SHAPE_PHONES   => array_values(array_filter(array_map(self::phone(...), $value))),
+            self::SHAPE_CONTACTS => array_values(array_filter(array_map(self::contact(...), $value))),
+            default              => $value,
         };
     }
 
@@ -197,6 +204,33 @@ abstract class Entry
             'extension' => self::string($value['extension'] ?? null) ?? '',
             'uri'       => self::string($value['uri'] ?? null) ?? '',
         ];
+    }
+
+    /**
+     * A contact in the Contact shape.
+     *
+     * @param mixed $value Raw contact.
+     *
+     * @return Contact|null Null when it has nothing to show.
+     */
+    private static function contact(mixed $value): ?array
+    {
+        if (!is_array($value)) {
+            return null;
+        }
+
+        $contact = [
+            'id'           => self::string($value['id'] ?? null) ?? '',
+            'name'         => self::string($value['name'] ?? null) ?? '',
+            'title'        => self::string($value['title'] ?? null) ?? '',
+            'relationship' => self::string($value['relationship'] ?? null) ?? '',
+            'emails'       => is_array($value['emails'] ?? null) ? self::strings($value['emails']) : [],
+            'phones'       => is_array($value['phones'] ?? null) ? array_values(array_filter(array_map(self::phone(...), $value['phones']))) : [],
+        ];
+
+        $shown = $contact['name'] !== '' || $contact['title'] !== '' || $contact['emails'] !== [] || $contact['phones'] !== [];
+
+        return $shown ? $contact : null;
     }
 
     /**

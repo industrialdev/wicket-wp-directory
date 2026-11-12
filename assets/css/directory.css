@@ -447,6 +447,30 @@
 	margin-block-start: var(--wd-space-sm);
 }
 
+/* Organization Contact: one block per person, name and relationship type on one line. */
+.wicket-directory .wicket-directory-card__person p {
+	margin: 0;
+}
+
+.wicket-directory .wicket-directory-card__person p + p {
+	margin-block-start: var(--wd-space-xs);
+}
+
+.wicket-directory .wicket-directory-card__person + .wicket-directory-card__person {
+	margin-block-start: var(--wd-space-md);
+}
+
+.wicket-directory-card__person-heading {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0 var(--wd-space-sm);
+}
+
+.wicket-directory-card__person-name {
+	color: var(--wd-text);
+	font-weight: bold;
+}
+
 .wicket-directory-card__actions,
 .wicket-directory-card__tags {
 	display: flex;

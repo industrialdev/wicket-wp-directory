@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Wicket\Directory\Admin;
 
+use Wicket\Directory\Api\OrganizationContacts;
 use Wicket\Directory\Config\DirectoryConfig;
 use Wicket\Directory\Config\DirectoryType;
 use Wicket\Directory\Data\ContactResolver;
+use Wicket\Directory\Data\EnumLabels;
 use Wicket\Directory\PostType\DirectoryPostType;
 use Wicket\Directory\Query\RequestParams;
 use WP_Post;
@@ -413,10 +415,51 @@ final class DirectoryMetaBoxes
             ];
         }
 
+        $org_contact = null;
+
+        if (isset($card['org_contact'])) {
+            $records = [];
+
+            foreach (DirectoryConfig::ORG_CONTACT_RECORDS as $key) {
+                $saved = $card['org_contact'][$key]['type'] === DirectoryConfig::CONTACT_ANY ? [] : [$card['org_contact'][$key]['type']];
+
+                $records[$key] = [
+                    'label' => self::contact_labels()[$key],
+                    'noun'  => self::contact_nouns()[$key],
+                    /* translators: %s: Contact record type slug. */
+                    'types' => self::with_saved($this->resource_types->for(ContactResolver::RELATIONSHIPS[$key], $lang), $saved, __('Unknown type (%s)', 'wicket-directory')),
+                ];
+            }
+
+            $org_contact = [
+                'sources' => [
+                    DirectoryConfig::ORG_CONTACT_OWNER        => __('Membership Owner', 'wicket-directory'),
+                    DirectoryConfig::ORG_CONTACT_RELATIONSHIP => __('Relationship Types', 'wicket-directory'),
+                ],
+                /* translators: %s: Relationship type slug. */
+                'types'   => self::with_saved($this->resource_types->for(EnumLabels::RELATIONSHIP_TYPES, $lang), $card['org_contact']['relationship_types'], __('Unknown type (%s)', 'wicket-directory')),
+                'hints'   => [
+                    DirectoryConfig::ORG_CONTACT_OWNER        => __('The owner of the organization\'s active membership. With types chosen, only an owner with an active relationship of one of them to the organization shows. When the directory is limited to tiers, only those memberships\' owners count; otherwise every owner does.', 'wicket-directory'),
+                    DirectoryConfig::ORG_CONTACT_RELATIONSHIP => sprintf(
+                        /* translators: %d: The most people one card lists. */
+                        __('Everyone with an active relationship of the chosen types to the organization, or of any type when none is chosen. Up to %d people per card.', 'wicket-directory'),
+                        OrganizationContacts::MAX_PER_ORG,
+                    ),
+                ],
+                'toggles' => [
+                    'name'         => __('Name', 'wicket-directory'),
+                    'relationship' => __('Relationship type, next to the name', 'wicket-directory'),
+                    'title'        => __('Job title', 'wicket-directory'),
+                ],
+                'records' => $records,
+            ];
+        }
+
         return [
             'field'                 => self::FIELD,
             'config'                => $config,
             'card'                  => $card,
+            'org_contact'           => $org_contact,
             'groups'                => $groups,
             'toggles'               => $fields['toggles'],
             'refs'                  => $refs,
@@ -424,7 +467,7 @@ final class DirectoryMetaBoxes
             'tag_values'            => $tag_values,
             'schemas_failed'        => $fields['refs'] !== [] && $this->schema_fields->failed(),
             'contacts'              => $contacts,
-            'resource_types_failed' => $contacts !== [] && $this->resource_types->failed(),
+            'resource_types_failed' => ($contacts !== [] || $org_contact !== null) && $this->resource_types->failed(),
             'address_formats'       => [
                 'full'                  => __('Full address', 'wicket-directory'),
                 'city_province_country' => __('City, province/state, country', 'wicket-directory'),
@@ -666,8 +709,9 @@ final class DirectoryMetaBoxes
      * divider between groups.
      *
      * Every key of card_fields() is in exactly one group, plus `tag_chips`
-     * (not for groups). `address_format` and `website_label` are shown under
-     * their contact rule.
+     * (not for groups) and `org_contact` (organizations only), which have
+     * controls of their own. `address_format` and `website_label` are shown
+     * under their contact rule.
      *
      * @param DirectoryType $type Directory type.
      *
@@ -692,6 +736,7 @@ final class DirectoryMetaBoxes
             DirectoryType::Organization => [
                 ['logo', 'org_type', 'description'],
                 ...$shared,
+                ['org_contact'],
             ],
             DirectoryType::Group => [
                 ['status', 'group_type'],

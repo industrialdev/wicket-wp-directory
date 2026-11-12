@@ -22,7 +22,8 @@ use WP_Post;
  *
  * - Picks the query builder from the directory type and sends the query with
  *   wicket_api_client().
- * - Caches each page (with its tier labels or group member counts) in a transient. The TTL defaults
+ * - Caches each page (with its tier labels, Organization Contacts or group member counts) in a
+ *   transient. The TTL defaults
  *   to CACHE_TTL and can be changed with the wicket_directory/cache_ttl filter.
  * - Never throws and never prints: an API failure is logged and returned as an
  *   empty page flagged `unavailable`. Failures aren't cached.
@@ -105,6 +106,13 @@ final class DirectoryRepository
      * returns an empty page without calling the API. A page number past the
      * last page returns the last page.
      *
+     * The card can add batch requests per page, never per row: the tiers;
+     * a group's member counts; an organization's Organization Contacts
+     * (OrganizationContacts: the owners come with the tier request's
+     * `include=owner`, then up to one `connections/query` and one
+     * `people/query`). A batch that fails is logged, the page shows without
+     * it and isn't cached.
+     *
      * @param WP_Post         $directory The directory post. Its ID, slug and modified date feed the
      *                                   cache key; its slug feeds the query_args_{slug} filter.
      * @param DirectoryConfig $config    The directory's config.
@@ -132,14 +140,34 @@ final class DirectoryRepository
 
         return $this->load($directory, $config, $query, $per_page, $lang, function (object $client, ResultPage $page) use ($directory, $config, $lang): array {
             $cacheable = true;
+            $contact = $config->org_contact();
+            $wants_tiers = ($config->card['membership_tier'] ?? false) === true;
+            $wants_owners = $contact !== null && $contact['source'] === DirectoryConfig::ORG_CONTACT_OWNER;
+            $memberships = null;
 
-            if (($config->card['membership_tier'] ?? false) === true) {
+            if ($wants_tiers || $wants_owners) {
                 try {
                     $entity = $config->type === DirectoryType::Individual ? 'person' : 'organization';
-                    $page = $page->with_tiers($this->tiers($client, $entity, $config->eligibility['membership_ids'], $page->items, $lang));
+                    // One request serves the tier line and the membership owners.
+                    $memberships = $this->memberships($client, $entity, $page->items, $wants_owners ? 'membership,owner' : 'membership');
+
+                    if ($wants_tiers) {
+                        $page = $page->with_tiers(self::tiers($memberships, $entity, $config->eligibility['membership_ids'], $page->items, $lang));
+                    }
                 } catch (Throwable $e) {
-                    // Show the results without tiers, but don't cache them, so the next visit retries.
-                    $this->log_error($directory, 'Directory tier lookup failed: ' . $e->getMessage());
+                    // Show the results without tiers or owners, but don't cache them, so the next visit retries.
+                    $this->log_error($directory, 'Directory membership lookup (tiers, owners) failed: ' . $e->getMessage());
+                    $cacheable = false;
+                }
+            }
+
+            if ($contact !== null && (!$wants_owners || $memberships !== null)) {
+                try {
+                    $loaded = (new OrganizationContacts($client))->load(self::ids($page->items), $contact, $memberships, $config->eligibility['membership_ids']);
+                    $page = $page->with_org_contacts($loaded['contacts'], $loaded['people'], $loaded['included']);
+                } catch (Throwable $e) {
+                    // The cards show without the section; don't cache, so the next visit retries.
+                    $this->log_error($directory, 'Directory organization contact lookup failed: ' . $e->getMessage());
                     $cacheable = false;
                 }
             }
@@ -214,7 +242,8 @@ final class DirectoryRepository
             if (($config->member_card['membership_tier'] ?? false) === true) {
                 try {
                     // A group directory has no tier eligibility, so every active tier shows.
-                    $page = $page->with_tiers($this->tiers($client, 'person', [], $page->items, $lang));
+                    $memberships = $this->memberships($client, 'person', $page->items, 'membership');
+                    $page = $page->with_tiers(self::tiers($memberships, 'person', [], $page->items, $lang));
                 } catch (Throwable $e) {
                     $this->log_error($directory, 'Member list tier lookup failed: ' . $e->getMessage());
                     $cacheable = false;
@@ -403,30 +432,25 @@ final class DirectoryRepository
     }
 
     /**
-     * Active membership tiers for the entities on a page: one batch request.
+     * Active memberships of the entities on a page: one batch request.
      *
      * `include=person_memberships` doesn't exist on people/query, so this asks
      * `{person|organization}_memberships/query` for every entity on the page.
-     * When the directory is limited to tiers, only those tiers are kept;
-     * otherwise every distinct active tier is. See api-queries.md, "Tiers on
-     * the card".
+     * See api-queries.md, "Tiers on the card". An organization page that shows
+     * its membership owners adds `owner` to the include ("Membership owner").
      *
      * @param object                     $client  API client.
      * @param string                     $entity  `person` or `organization`.
-     * @param list<string>               $allowed The directory's tier UUIDs (lower case); empty for any.
      * @param list<array<string, mixed>> $items   The page's resources.
-     * @param string                     $lang    Two-letter language code, for `name_{lang}`.
+     * @param string                     $include `membership`, or `membership,owner`.
      *
      * @throws RuntimeException When the response isn't a JSON:API list.
      *
-     * @return array<string, list<Tier>> Keyed by entity UUID; entities with no tier are left out.
+     * @return array<string, mixed> The response; empty when the page has no IDs.
      */
-    private function tiers(object $client, string $entity, array $allowed, array $items, string $lang): array
+    private function memberships(object $client, string $entity, array $items, string $include): array
     {
-        $ids = array_values(array_unique(array_filter(
-            array_map(static fn (array $item): string => is_string($item['id'] ?? null) ? $item['id'] : '', $items),
-            static fn (string $id): bool => $id !== ''
-        )));
+        $ids = self::ids($items);
 
         if ($ids === []) {
             return [];
@@ -434,7 +458,7 @@ final class DirectoryRepository
 
         $query_string = preg_replace('/\%5B\d+\%5D/', '%5B%5D', http_build_query([
             'page'    => ['size' => self::TIER_PAGE_SIZE],
-            'include' => 'membership',
+            'include' => $include,
         ]));
 
         $response = $client->post($entity . '_memberships/query?' . $query_string, ['json' => ['filter' => [
@@ -444,6 +468,31 @@ final class DirectoryRepository
 
         if (!is_array($response) || !is_array($response['data'] ?? null)) {
             throw new RuntimeException('Unexpected response from ' . $entity . '_memberships/query.');
+        }
+
+        return $response;
+    }
+
+    /**
+     * Active membership tiers for the entities on a page, from memberships().
+     *
+     * When the directory is limited to tiers, only those tiers are kept;
+     * otherwise every distinct active tier is.
+     *
+     * @param array<string, mixed>       $response The memberships() response.
+     * @param string                     $entity   `person` or `organization`.
+     * @param list<string>               $allowed  The directory's tier UUIDs (lower case); empty for any.
+     * @param list<array<string, mixed>> $items    The page's resources.
+     * @param string                     $lang     Two-letter language code, for `name_{lang}`.
+     *
+     * @return array<string, list<Tier>> Keyed by entity UUID; entities with no tier are left out.
+     */
+    private static function tiers(array $response, string $entity, array $allowed, array $items, string $lang): array
+    {
+        $ids = self::ids($items);
+
+        if ($ids === []) {
+            return [];
         }
 
         $memberships = [];
@@ -458,7 +507,7 @@ final class DirectoryRepository
         $wanted = array_flip($ids);
         $tiers = [];
 
-        foreach ($response['data'] as $row) {
+        foreach (is_array($response['data'] ?? null) ? $response['data'] : [] as $row) {
             $owner = $row['relationships'][$entity]['data']['id'] ?? null;
             $tier_id = $row['relationships']['membership']['data']['id'] ?? null;
 
@@ -474,6 +523,21 @@ final class DirectoryRepository
         }
 
         return array_map('array_values', $tiers);
+    }
+
+    /**
+     * The distinct, non-empty IDs of a page's resources, in order.
+     *
+     * @param list<array<string, mixed>> $items The page's resources.
+     *
+     * @return list<string>
+     */
+    private static function ids(array $items): array
+    {
+        return array_values(array_unique(array_filter(
+            array_map(static fn (array $item): string => is_string($item['id'] ?? null) ? $item['id'] : '', $items),
+            static fn (string $id): bool => $id !== ''
+        )));
     }
 
     /**

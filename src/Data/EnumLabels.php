@@ -9,8 +9,8 @@ use Throwable;
 use Wicket\Directory\Api\DirectoryRepository;
 
 /**
- * Display labels for data-field enum keys, organization type slugs and group
- * type slugs.
+ * Display labels for data-field enum keys, organization type slugs, and the
+ * group type, group member role and relationship type slugs.
  *
  * Each source is loaded at most once per instance, and only when a label is
  * first asked for. EntryMapper and FacetOptions use the shared() instance, so
@@ -36,6 +36,11 @@ final class EnumLabels
      * Bump when the stored label maps change shape, so old transients are skipped.
      */
     public const LABELS_CACHE_FORMAT = 1;
+
+    /**
+     * The `resource_type` of person ⟷ organization relationship types.
+     */
+    public const RELATIONSHIP_TYPES = 'connection_person_to_organizations';
 
     /**
      * The instance shared by every directory rendered in this request.
@@ -317,6 +322,20 @@ final class EnumLabels
     public function group_member_roles(string $lang): array
     {
         return $this->resource_type_labels('group_members', $lang);
+    }
+
+    /**
+     * Labels for person ⟷ organization relationship types (`connections.type`,
+     * the `resource_type_slug_in` values), e.g. Primary Contact.
+     *
+     * @param string $lang Two-letter language code.
+     *
+     * @return array<string, string> Slug => `name_{lang}`, else `name`, else `name_en`, else the slug,
+     *                               in API order.
+     */
+    public function relationship_types(string $lang): array
+    {
+        return $this->resource_type_labels(self::RELATIONSHIP_TYPES, $lang);
     }
 
     /**

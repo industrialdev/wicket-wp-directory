@@ -1,7 +1,7 @@
 ---
 title: "Phase 2 Tickets"
 audience: [developer, agent]
-updated: 2026-11-11
+updated: 2026-11-12
 ---
 
 # `wicket-wp-directory` Phase 2 tickets
@@ -23,7 +23,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | P2.2 | [Group card template](#p22) | P2.1 | Done |
 | P2.3 | [Group roster page: Default View, Back to Directory, own search, filters, sort and paging](#p23) | P2.2 | Done |
 | P2.4 | [Group Member card, with its own card config and facets](#p24) | P2.3 | Done |
-| P2.5 | [Organization Contact on the org card (Membership Owner / Relationship Types)](#p25) | P2.0 | To do |
+| P2.5 | [Organization Contact on the org card (Membership Owner / Relationship Types)](#p25) | P2.0 | Done |
 | P2.6 | [Individual card: Employer, Designation and relationship types](#p26) | P2.0 | To do |
 | P2.7 | [Merge-tag card template engine (`[col]` / `{{field}}`)](#p27) | P2.4, P2.5, P2.6 | To do |
 | P2.8 | [Admin Advance Configurations editor](#p28) | P2.7 | To do |
@@ -204,6 +204,17 @@ Show who to contact for an organization on its card. Config under the org card:
 
 - Backwards compatible: org directories saved before this keep rendering without the section.
 - Unit tests for both modes and the relationship-type filter rules.
+
+**Outcome (2026-11-12):**
+
+- **Config.** The organization card gains `org_contact`: `show` (off by default, so configs saved before this read back and render without the section), `source` (`DirectoryConfig::ORG_CONTACT_OWNER` | `ORG_CONTACT_RELATIONSHIP`), `relationship_types` (slugs), the toggles `name`, `title` and `relationship` (on), and `email` / `phone` contact rules (off: they are a person's own records on a public card). `DirectoryConfig::org_contact()` returns the settings when the section is on, else null. Only organization cards have the key; a type change resets it with the rest of the card.
+- **Owner rule (the open question).** When the directory is limited to tiers, only the owners of memberships in those tiers count, as on the tier line. Otherwise every distinct owner of the org's active memberships shows, newest membership (`starts_at`) first. With relationship types chosen, an owner shows only with an active relationship of one of them to *that* organization, matched per (person, org) pair, and their type labels show next to the name. With none, the owner always shows, with no label.
+- **Relationship Types mode.** Everyone with an active relationship of the chosen types (any type when none) to the org; a person with several matching types is listed once with all of them. Order: the first matching type in the admin's order, then family and given name. At most `OrganizationContacts::MAX_PER_ORG` (10) per card, so "any type" on a large org doesn't list its whole staff.
+- **Batches.** New `Api\OrganizationContacts`, called from `DirectoryRepository::fetch()`. Owners come from the tier request, which now asks `include=membership,owner` (one `organization_memberships/query` serves the tier line and the owners). Then at most one `connections/query` (owners with types: `person_uuid_in` the owners, no include; Relationship Types: `include=person`) and one `people/query` `uuid_in` + `include=emails,phones` when the section shows an email or phone. Stored on `ResultPage` (`org_contacts`, `contact_people`, `contact_included`) and cached with the page. A failed batch is logged; the page shows without the section and isn't cached. Pages cached before this read back without contacts.
+- **Data.** `OrganizationEntry::$contacts` (after `$extra`, so positional callers are unaffected): a list of `{id, name, title, relationship, emails, phones}`. Name is given + family (else `full_name`), title is `job_title`, `relationship` the comma-joined type labels (`EnumLabels::relationship_types()`, resource type `connection_person_to_organizations`, slug when unlabelled). Email and phone go through `ContactResolver` with the section's own rules. A person with nothing to show, or missing from the batch, is left out. The entry filters get `contacts`; `Entry::with()` keeps each one in that shape and drops any with nothing to show.
+- **Template.** `cards/card-organization` gets a third column after Address and Contact, `wicket-directory-card__people`, headed "Organization Contact" / "Organization Contacts" (`_n`). Each person: name and relationship type on one line, then the title, email and phone (the `link` component, as the org's own). No column when nobody qualifies. `directory.css` adds the person spacing; tokens only.
+- **Admin.** An "Organization Contact" item last in the organization card's Card View: source radios, a relationship-type chip picker (from `resource_types`; a saved type the MDP no longer lists stays, marked), a hint per source, the three toggles, and an email and a phone contact rule. The contact rule markup moved to `views/contact-rule.php`, shared with the card's own rules. `admin.js` now scopes each Card View item to its own elements, because this item nests two contact rules, and shows the hint of the chosen source (`data-wd-mode`).
+- **Checked** on the local stack against staging (`wp eval-file`, directory 1883, config built in memory, cache off): Membership Owner lists an owner on all 13 orgs with the one membership request; with email and phone, one extra `people/query` gives their primary records; with types `employee` / `primary-contact` nobody shows, as P2.0 found (no owner has an active relationship to their own org); Relationship Types (any) lists people on 7 orgs, by family name, with their type labels; `employee` only, 3 orgs. Not checked in a browser: the admin item and its script, and the column's look.
 
 <a id="p26"></a>
 

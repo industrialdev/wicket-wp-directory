@@ -4,9 +4,8 @@ Wicket Directory adds configurable public directories of **Individuals** and **O
 
 > **Status: in development (scaffold landed).** The approved plan is `docs/engineering/mvp-plan.md`. Read it before writing code; it is the source of truth for scope, data model and decisions. Classes and paths below are the planned layout unless marked as landed. Update this file as they land.
 
-MVP scope: Individual and Organization directories only. Phase 2 (`docs/engineering/phase-2-tickets.md`) is under way: the Group directory type landed in P2.1 (config, query builder, eligibility, data, admin), its card in P2.2, group member lists (Default View, View Members, Back to Directory) in P2.3, and the Group Member card with its own card config and facets in P2.4. These are still deferred, so don't build them without being asked:
+MVP scope: Individual and Organization directories only. Phase 2 (`docs/engineering/phase-2-tickets.md`) is under way: the Group directory type landed in P2.1 (config, query builder, eligibility, data, admin), its card in P2.2, group member lists (Default View, View Members, Back to Directory) in P2.3, the Group Member card with its own card config and facets in P2.4, and Organization Contact on the org card (Membership Owner / Relationship Types) in P2.5. These are still deferred, so don't build them without being asked:
 - Employer on the individual and Group Member cards (P2.6)
-- Organization Contact (Membership Owner / Relationship Types)
 - the Developer panel UI
 - the `[col]/{{field}}` merge-tag card editor
 
@@ -56,7 +55,9 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
                                  Group Members view), member_status active | inactive | all; has_roster().
                                  `member_card` (P2.4) = the Group Member card: the individual card's keys (contacts off by default) + MEMBERSHIP_FIELDS
                                  role | status | start_date | end_date (on); `member_facets` = data-field facets on people. Groups only: other types keep
-                                 the defaults, and a type change resets both. shows_membership() = any group field on; member_card() = the property
+                                 the defaults, and a type change resets both. shows_membership() = any group field on; member_card() = the property.
+                                 Organization card key `org_contact` (P2.5; off by default): source owner | relationship, relationship_types,
+                                 name / title / relationship toggles, email / phone contact rules; org_contact() = the settings when on, else null
     Admin\DirectoryMetaBoxes     (landed, admin only) one "Directory settings" meta box (render_box → views/settings.php); posts `wicket_directory[...]`;
                                  save_post handler lays the posted SECTIONS (`type`, `eligibility`, `card`, `facets`, `member_card`, `member_facets`,
                                  `roster`) over the stored config
@@ -69,12 +70,14 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
                                  searchable picker); views/chip-picker.php is the shared multi-select. Data-field pickers post "schema_key.field".
                                  A group directory's tabs hold both cards in `data-wd-card="group|member"` sections: the Group card + facets, and the
                                  Group Member card (member_card_fields(), member_card_groups(); section `member_card`, ids `wicket-directory-member-card-*`)
+                                 Organization cards end with an Organization Contact item (data-wd-item="org-contact": source radios `data-wd-mode`,
+                                 relationship-type chips, toggles, and nested email / phone rules); views/contact-rule.php is the shared contact rule
                                  + member list facets (person enum data fields; section `member_facets`). views/card-switch.php (render_card_switch, above
                                  the tabs, Group List + Member List only) picks one; the other views show only the card they reach
                                  assets/js/admin.js (no build): type toggles, tabs, popovers, chips, reveals and contact hints, facet repeater;
                                  assets/css/admin.css styles the box. Everything posts the same without the script
       → Admin\MembershipTiers    (landed) tier choices from GET memberships, filtered by type
-      → Admin\ResourceTypes      (landed) one GET resource_types: org types, group types and contact record types (ContactResolver::RELATIONSHIPS)
+      → Admin\ResourceTypes      (landed) one GET resource_types: org types, group types, relationship types and contact record types (ContactResolver::RELATIONSHIPS)
       → Admin\SchemaFields       (landed) GET json_schemas?include=json_schema_resources: the type's text/list data fields, with an enum flag (none for groups)
       → Admin\Groups             (landed) one groups/query (2000, sorted name_{lang}): every group for the exclude picker; loaded for saved group directories only
     Api\DirectoryCache           (landed) save_post_wicket_directory (priority 20, after the settings save) and before_delete_post → purge(ID):
@@ -118,9 +121,14 @@ Block render_callback / ServerSideRender
       → Api\DirectoryRepository  (landed) builder by type → API + transient cache → Api\ResultPage (landed; `unavailable` on API failure)
           group directories: one group_members/query batch per page → ResultPage::member_counts (distinct active people; falls back to
           active_member_count past 2000 rows or on failure); group(directory, config, uuid) → the eligible group or null (uncached)
-      → Data\EntryMapper (landed; map(page, config, slug, lang) → Data\PersonEntry | OrganizationEntry | GroupEntry, immutable, raw values, empty = hidden)
+          org directories with Organization Contact: Api\OrganizationContacts (landed, P2.5) → ResultPage::org_contacts / contact_people /
+          contact_included. Owners from the tier request (`include=membership,owner`; configured tiers' owners, else every owner, newest
+          first); connections/query for owners' relationship types (per org) or every relationship of the types; people/query uuid_in
+          + include=emails,phones when email or phone shows. At most MAX_PER_ORG (10) per card
+      → Data\EntryMapper (landed; map(page, config, slug, lang) → Data\PersonEntry | OrganizationEntry | GroupEntry, immutable, raw values, empty = hidden;
+          OrganizationEntry::$contacts = [{id, name, title, relationship, emails, phones}], records through ContactResolver)
           uses Data\ContactResolver (landed; static resolve(field, records, rule), the truth table)
-          and Data\EnumLabels (landed; enum-key, org-type and group-type labels, one load per source per request; shared() keeps the maps in a transient per language)
+          and Data\EnumLabels (landed; enum-key, org-type, group-type, role and relationship-type labels, one load per source per request; shared() keeps the maps in a transient per language)
       → Render\TemplateLoader (landed) templates/directory.php → parts/*, cards/card-{type} (theme overrides at {theme}/wicket-directory/{name}.php)
           parts/roster-header (landed): Back to Directory link, group type eyebrow, h2 name, description (member lists only)
           parts/search-bar (landed): search-form + location field
@@ -131,7 +139,8 @@ Block render_callback / ServerSideRender
           cards/card-individual (landed): component-card-listing classes; details / address / contact columns; tag, button, link + icon components
           cards/card-group-member (landed): the individual card + status pill (tag) beside the name, role under it, start / end date
             ("Present") in Details
-          cards/card-organization (landed): same structure; org type under the name, logo, description with Show more / Show less (Alpine) past 40 words
+          cards/card-organization (landed): same structure; org type under the name, logo, description with Show more / Show less (Alpine) past 40 words;
+            a third column `__people` ("Organization Contact(s)") when anyone qualifies: name + relationship type, title, email, phone
           cards/card-group (landed): summary row of [name + status pill (tag) / group type] and [member count + View Members button],
             side by side via @container; description with Show more / Show less; no image. The button shows only when
             GroupEntry::$members_url is set: the mapper sets it in the Group List + Member List view when card key view_members is on
@@ -177,7 +186,7 @@ There is **one render path**. The frontend and the block editor preview both go 
 | Hook | Purpose |
 |---|---|
 | `wicket_directory/query_args`, `wicket_directory/query_args_{slug}` (filter) | (landed) Modify the API query before it runs. Gets `$args` (`filter`, `page`, `sort`, `include`), `DirectoryConfig`, `RequestParams`. `{slug}` is the directory post's slug. A group member list's query is a `people/query`: tell it by `$params->is_roster()` |
-| `wicket_directory/entry`, `wicket_directory/entry_{slug}` (filter) | (landed) Modify one entry's data before its card renders. Gets the entry's `to_array()`, the raw API resource and `DirectoryConfig`; returns the array. Unknown keys are dropped and wrong-typed values keep the original; custom data goes under `extra`. A member list's entries also have `role`, `role_label`, `status`, `start_date`, `end_date` |
+| `wicket_directory/entry`, `wicket_directory/entry_{slug}` (filter) | (landed) Modify one entry's data before its card renders. Gets the entry's `to_array()`, the raw API resource and `DirectoryConfig`; returns the array. Unknown keys are dropped and wrong-typed values keep the original; custom data goes under `extra`. A member list's entries also have `role`, `role_label`, `status`, `start_date`, `end_date`; an organization's have `contacts` (list of `{id, name, title, relationship, emails, phones}`) |
 | `wicket_directory/before_render`, `wicket_directory/before_render_{slug}` (action) | (landed) Runs before the listing's API query and render. Gets `DirectoryConfig`, `RequestParams`, the directory `WP_Post`. Output it prints comes before the directory. Not fired for a missing or unpublished directory. For a group member list it gets the member list's params and runs after the group lookup |
 | `wicket_directory/card_template` (filter) | (landed) Swap the card template file, once per render. Gets the located absolute path (`''` when none), `DirectoryConfig`, the directory `WP_Post`. A return that isn't an existing file keeps the located one |
 | `wicket_directory/cache_ttl` (filter) | (landed) API response cache lifetime in seconds (default 600). Gets `$ttl`, `DirectoryConfig`, the directory `WP_Post`. `0` disables the cache |

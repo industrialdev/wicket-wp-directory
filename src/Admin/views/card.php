@@ -11,8 +11,12 @@
  *   posted; it's ticked when a field is chosen. Unticking it disables the
  *   field picker, so the reference isn't posted and saves as off. Choosing
  *   "Choose a field…" turns it off too.
- * - Contact rules reveal their type, flags and hint. The script shows the hint
- *   (`data-wd-hint`) that matches the ticked flags.
+ * - Contact rules (views/contact-rule.php) reveal their type, flags and hint.
+ *   The script shows the hint (`data-wd-hint`) that matches the ticked flags.
+ * - An organization card's Organization Contact (`org_contact`) reveals its
+ *   source, relationship types, what each contact shows, and an email and a
+ *   phone contact rule of its own, nested. The script shows the hint of the
+ *   chosen source (`data-wd-mode`).
  *
  * Only the saved type's settings are printed. While the type select differs
  * from the saved type, the script swaps them for the `data-wd-type-changed`
@@ -43,6 +47,7 @@
  *     contacts: array<string, array{label: string, noun: string, types: array<string, string>}>,
  *     resource_types_failed: bool,
  *     address_formats: array<string, string>,
+ *     org_contact: array{sources: array<string, string>, types: array<string, string>, hints: array<string, string>, toggles: array<string, string>, records: array<string, array{label: string, noun: string, types: array<string, string>}>}|null,
  * } $args
  */
 
@@ -56,6 +61,10 @@ $id_prefix = $args['id_prefix'] ?? 'wicket-directory-card-';
 
 $chip_picker = static function (array $args): void {
     include __DIR__ . '/chip-picker.php';
+};
+
+$contact_rule = static function (array $args): void {
+    include __DIR__ . '/contact-rule.php';
 };
 
 /**
@@ -177,56 +186,92 @@ $hint_state = static fn (array $rule): string => match (true) {
                 <?php elseif (isset($args['contacts'][$key])) : ?>
                     <?php
                     $contact = $args['contacts'][$key];
-                    $rule = $card[$key];
-                    $rule_name = $name . '[' . $key . ']';
-                    $state = $hint_state($rule);
-                    /* translators: %s: Contact field, e.g. "Email". */
-                    $type_label = sprintf(__('%s type', 'wicket-directory'), $contact['label']);
+                    $contact_rule([
+                        'key'             => $key,
+                        'name'            => $name . '[' . $key . ']',
+                        'id'              => $id,
+                        'label'           => $contact['label'],
+                        /* translators: %s: Contact field, e.g. "Email". */
+                        'type_label'      => sprintf(__('%s type', 'wicket-directory'), $contact['label']),
+                        'types'           => $contact['types'],
+                        'rule'            => $card[$key],
+                        'hints'           => $hints($key, $contact['noun']),
+                        'state'           => $hint_state($card[$key]),
+                        'card_name'       => $name,
+                        'address_format'  => $card['address_format'],
+                        'address_formats' => $args['address_formats'],
+                        'website_label'   => $card['website_label'],
+                    ]);
                     ?>
-                    <div class="wd-item" data-wd-item="contact">
-                        <input type="hidden" name="<?php echo esc_attr($rule_name); ?>[show]" value="0">
+
+                <?php elseif ($key === 'org_contact' && ($args['org_contact'] ?? null) !== null) : ?>
+                    <?php
+                    $org_contact = $card['org_contact'];
+                    $org_name = $name . '[org_contact]';
+                    $org_id = $id_prefix . 'org-contact';
+                    ?>
+                    <div class="wd-item" data-wd-item="org-contact">
+                        <input type="hidden" name="<?php echo esc_attr($org_name); ?>[show]" value="0">
                         <label class="wd-check">
-                            <input type="checkbox" name="<?php echo esc_attr($rule_name); ?>[show]" value="1" data-wd-reveal-toggle <?php checked($rule['show']); ?>>
-                            <?php echo esc_html($contact['label']); ?>
+                            <input type="checkbox" name="<?php echo esc_attr($org_name); ?>[show]" value="1" data-wd-reveal-toggle <?php checked($org_contact['show']); ?>>
+                            <?php esc_html_e('Organization Contact', 'wicket-directory'); ?>
                         </label>
+                        <p class="wd-help wd-indent"><?php esc_html_e('People to contact about the organization, in their own column. Hidden on a card when nobody qualifies.', 'wicket-directory'); ?></p>
                         <div class="wd-indent" data-wd-reveal>
-                            <?php if ($key === 'address') : ?>
-                                <fieldset>
-                                    <legend class="wd-sublabel"><?php esc_html_e('Format', 'wicket-directory'); ?></legend>
-                                    <?php foreach ($args['address_formats'] as $format => $label) : ?>
-                                        <label class="wd-check">
-                                            <input type="radio" name="<?php echo esc_attr($name); ?>[address_format]" value="<?php echo esc_attr($format); ?>" <?php checked($card['address_format'], $format); ?>>
-                                            <?php echo esc_html($label); ?>
-                                        </label>
-                                    <?php endforeach; ?>
-                                </fieldset>
-                            <?php endif; ?>
-                            <label class="wd-sublabel" for="<?php echo esc_attr($id); ?>-type"><?php echo esc_html($type_label); ?></label>
-                            <select id="<?php echo esc_attr($id); ?>-type" class="wd-field" name="<?php echo esc_attr($rule_name); ?>[type]">
-                                <option value="any" <?php selected($rule['type'], 'any'); ?>><?php esc_html_e('Any type', 'wicket-directory'); ?></option>
-                                <?php foreach ($contact['types'] as $slug => $label) : ?>
-                                    <option value="<?php echo esc_attr((string) $slug); ?>" <?php selected($rule['type'], (string) $slug); ?>><?php echo esc_html($label); ?></option>
+                            <fieldset>
+                                <legend class="wd-sublabel"><?php esc_html_e('Show', 'wicket-directory'); ?></legend>
+                                <?php foreach ($args['org_contact']['sources'] as $source => $label) : ?>
+                                    <label class="wd-check">
+                                        <input type="radio" name="<?php echo esc_attr($org_name); ?>[source]" value="<?php echo esc_attr($source); ?>" data-wd-mode <?php checked($org_contact['source'], $source); ?>>
+                                        <?php echo esc_html($label); ?>
+                                    </label>
                                 <?php endforeach; ?>
-                            </select>
-                            <input type="hidden" name="<?php echo esc_attr($rule_name); ?>[only_directory]" value="0">
-                            <label class="wd-check">
-                                <input type="checkbox" name="<?php echo esc_attr($rule_name); ?>[only_directory]" value="1" data-wd-flag="directory" <?php checked($rule['only_directory']); ?>>
-                                <?php esc_html_e('Only show if flagged "Show in Directory"', 'wicket-directory'); ?>
-                            </label>
-                            <?php if ($key !== 'website') : ?>
-                                <input type="hidden" name="<?php echo esc_attr($rule_name); ?>[only_primary]" value="0">
-                                <label class="wd-check">
-                                    <input type="checkbox" name="<?php echo esc_attr($rule_name); ?>[only_primary]" value="1" data-wd-flag="primary" <?php checked($rule['only_primary']); ?>>
-                                    <?php esc_html_e('Only show if primary', 'wicket-directory'); ?>
-                                </label>
+                            </fieldset>
+                            <p class="wd-sublabel"><?php esc_html_e('Relationship types', 'wicket-directory'); ?></p>
+                            <?php if ($args['org_contact']['types'] !== []) : ?>
+                                <?php
+                                $chip_picker([
+                                    'name'     => $org_name . '[relationship_types][]',
+                                    'label'    => __('Relationship types', 'wicket-directory'),
+                                    'choices'  => ['' => $args['org_contact']['types']],
+                                    'selected' => $org_contact['relationship_types'],
+                                ]);
+                                ?>
+                            <?php elseif (!$args['resource_types_failed']) : ?>
+                                <p><?php esc_html_e('No relationship types were found.', 'wicket-directory'); ?></p>
                             <?php endif; ?>
-                            <?php foreach ($hints($key, $contact['noun']) as $hint => $text) : ?>
-                                <p class="wd-help" data-wd-hint="<?php echo esc_attr($hint); ?>" <?php echo $hint === $state ? '' : 'hidden'; ?>><?php echo esc_html($text); ?></p>
+                            <?php foreach ($args['org_contact']['hints'] as $hint => $text) : ?>
+                                <p class="wd-help" data-wd-hint="<?php echo esc_attr($hint); ?>" <?php echo $hint === $org_contact['source'] ? '' : 'hidden'; ?>><?php echo esc_html($text); ?></p>
                             <?php endforeach; ?>
-                            <?php if ($key === 'website') : ?>
-                                <label class="wd-sublabel" for="<?php echo esc_attr($id); ?>-label"><?php esc_html_e('Button label', 'wicket-directory'); ?></label>
-                                <input type="text" id="<?php echo esc_attr($id); ?>-label" class="wd-field" name="<?php echo esc_attr($name); ?>[website_label]" value="<?php echo esc_attr($card['website_label']); ?>" placeholder="<?php esc_attr_e('Visit Website', 'wicket-directory'); ?>">
-                            <?php endif; ?>
+                            <p class="wd-sublabel"><?php esc_html_e('Each contact shows', 'wicket-directory'); ?></p>
+                            <?php foreach ($args['org_contact']['toggles'] as $toggle => $label) : ?>
+                                <input type="hidden" name="<?php echo esc_attr($org_name . '[' . $toggle . ']'); ?>" value="0">
+                                <label class="wd-check">
+                                    <input type="checkbox" name="<?php echo esc_attr($org_name . '[' . $toggle . ']'); ?>" value="1" <?php checked($org_contact[$toggle]); ?>>
+                                    <?php echo esc_html($label); ?>
+                                </label>
+                            <?php endforeach; ?>
+                            <?php foreach ($args['org_contact']['records'] as $record => $contact) : ?>
+                                <?php
+                                $contact_rule([
+                                    'key'             => $record,
+                                    'name'            => $org_name . '[' . $record . ']',
+                                    'id'              => $org_id . '-' . $record,
+                                    'label'           => $contact['label'],
+                                    /* translators: %s: Contact field, e.g. "Email". */
+                                    'type_label'      => sprintf(__('%s type', 'wicket-directory'), $contact['label']),
+                                    'types'           => $contact['types'],
+                                    'rule'            => $org_contact[$record],
+                                    'hints'           => $hints($record, $contact['noun']),
+                                    'state'           => $hint_state($org_contact[$record]),
+                                    'card_name'       => $name,
+                                    'address_format'  => $card['address_format'],
+                                    'address_formats' => [],
+                                    'website_label'   => '',
+                                ]);
+                                ?>
+                            <?php endforeach; ?>
+                            <p class="wd-help"><?php esc_html_e('A contact\'s email and phone are their own records, picked with the rules above. Adds one or two API requests per page of results.', 'wicket-directory'); ?></p>
                         </div>
                     </div>
                 <?php endif; ?>

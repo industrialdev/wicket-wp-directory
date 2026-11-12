@@ -24,6 +24,7 @@ use WP_Post;
  * @phpstan-type Eligibility array{require_active_membership: bool, membership_ids: list<string>, org_types: list<string>, opt_in: OptIn|null, group_status: string, group_types: list<string>, excluded_groups: list<string>}
  * @phpstan-type Facet array{source: string, schema_key: string, field: string, label: string}
  * @phpstan-type Roster array{default_view: string, group: string, member_status: string}
+ * @phpstan-type OrgContact array{show: bool, source: string, relationship_types: list<string>, name: bool, title: bool, relationship: bool, email: ContactRule, phone: ContactRule}
  */
 final class DirectoryConfig
 {
@@ -124,6 +125,35 @@ final class DirectoryConfig
      * dates. Only a group's member list has them.
      */
     public const MEMBERSHIP_FIELDS = ['role', 'status', 'start_date', 'end_date'];
+
+    /**
+     * Organization Contact source: the owner of the organization's active
+     * membership(s), optionally only when they have an active relationship of
+     * the chosen types to the organization (the default).
+     */
+    public const ORG_CONTACT_OWNER = 'owner';
+
+    /**
+     * Organization Contact source: every person with an active relationship of
+     * the chosen types (any type when none is chosen) to the organization.
+     */
+    public const ORG_CONTACT_RELATIONSHIP = 'relationship';
+
+    /**
+     * Allowed values of card.org_contact.source.
+     */
+    public const ORG_CONTACT_SOURCES = [self::ORG_CONTACT_OWNER, self::ORG_CONTACT_RELATIONSHIP];
+
+    /**
+     * Organization Contact keys that are plain toggles: what each contact shows.
+     */
+    public const ORG_CONTACT_TOGGLES = ['name', 'title', 'relationship'];
+
+    /**
+     * Organization Contact keys that hold a contact rule for the person's own
+     * records. They go through ContactResolver, like the card's.
+     */
+    public const ORG_CONTACT_RECORDS = ['email', 'phone'];
 
     /**
      * Use defaults(), from_post() or sanitize().
@@ -312,6 +342,18 @@ final class DirectoryConfig
     }
 
     /**
+     * The Organization Contact settings, when the card shows the section.
+     *
+     * @return OrgContact|null Null for other types, or when the section is off.
+     */
+    public function org_contact(): ?array
+    {
+        $contact = $this->type === DirectoryType::Organization ? ($this->card['org_contact'] ?? null) : null;
+
+        return is_array($contact) && $contact['show'] === true ? $contact : null;
+    }
+
+    /**
      * Default eligibility: active members (or, for groups, active groups) only,
      * no other conditions.
      *
@@ -423,6 +465,7 @@ final class DirectoryConfig
                 'email'       => self::contact_rule(true),
                 'phone'       => self::contact_rule(true),
                 'website'     => self::contact_rule(true),
+                'org_contact' => self::org_contact_defaults(),
             ] + $shared,
             DirectoryType::Group => [
                 'status'       => true,
@@ -453,6 +496,60 @@ final class DirectoryConfig
         }
 
         return array_fill_keys(self::MEMBERSHIP_FIELDS, true) + $card;
+    }
+
+    /**
+     * Default Organization Contact: off, so organization cards saved before
+     * it existed render without it.
+     *
+     * When turned on it shows the membership owner's name and job title (and
+     * their relationship type, when types are chosen). The person's email and
+     * phone start off: they are a person's own records on a public card.
+     *
+     * @return OrgContact
+     */
+    private static function org_contact_defaults(): array
+    {
+        return [
+            'show'               => false,
+            'source'             => self::ORG_CONTACT_OWNER,
+            'relationship_types' => [],
+            'name'               => true,
+            'title'              => true,
+            'relationship'       => true,
+            'email'              => self::contact_rule(false),
+            'phone'              => self::contact_rule(false),
+        ];
+    }
+
+    /**
+     * Sanitize the Organization Contact settings.
+     *
+     * @param mixed      $value   Raw settings.
+     * @param OrgContact $default Their defaults.
+     *
+     * @return OrgContact
+     */
+    private static function sanitize_org_contact(mixed $value, array $default): array
+    {
+        $value = is_array($value) ? $value : [];
+        $source = $value['source'] ?? null;
+
+        $contact = [
+            'show'               => self::bool($value['show'] ?? null, $default['show']),
+            'source'             => in_array($source, self::ORG_CONTACT_SOURCES, true) ? $source : $default['source'],
+            'relationship_types' => self::identifier_list($value['relationship_types'] ?? null),
+        ];
+
+        foreach (self::ORG_CONTACT_TOGGLES as $key) {
+            $contact[$key] = self::bool($value[$key] ?? null, $default[$key]);
+        }
+
+        foreach (self::ORG_CONTACT_RECORDS as $key) {
+            $contact[$key] = self::sanitize_contact_rule($value[$key] ?? null, $default[$key], true);
+        }
+
+        return $contact;
     }
 
     /**
@@ -586,6 +683,7 @@ final class DirectoryConfig
                 $key === 'address_format'                  => in_array($value, self::ADDRESS_FORMATS, true) ? $value : $default,
                 $key === 'website_label'                   => is_string($value) ? sanitize_text_field($value) : $default,
                 $key === 'tag_chips'                       => self::data_field_list($value),
+                $key === 'org_contact'                     => self::sanitize_org_contact($value, $default),
                 is_bool($default)                          => self::bool($value, $default),
                 // The remaining keys are single data-field references.
                 default                                    => self::sanitize_data_field_ref($value),

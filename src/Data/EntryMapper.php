@@ -23,6 +23,7 @@ use Wicket\ResponseHelper;
  *
  * @phpstan-import-type DataFieldRef from DirectoryConfig
  * @phpstan-import-type Phone from Entry
+ * @phpstan-import-type Contact from Entry
  */
 final class EntryMapper
 {
@@ -66,7 +67,7 @@ final class EntryMapper
         foreach ($page->items as $item) {
             $entry = match ($config->type) {
                 DirectoryType::Individual   => $this->person($item, $response, $page, $config->card, $lang),
-                DirectoryType::Organization => $this->organization($item, $response, $page, $config->card, $lang),
+                DirectoryType::Organization => $this->organization($item, $response, $page, $config, $lang),
                 DirectoryType::Group        => $this->group($item, $page, $config, $lang, $members_url),
             };
 
@@ -247,24 +248,99 @@ final class EntryMapper
      *
      * @param array<string, mixed> $item     `organizations` resource.
      * @param ResponseHelper       $response The page, for included records.
-     * @param ResultPage           $page     The page, for tiers.
-     * @param array<string, mixed> $card     The organization card's toggles.
+     * @param ResultPage           $page     The page, for tiers and Organization Contacts.
+     * @param DirectoryConfig      $config   The organization directory's config.
      * @param string               $lang     Language code.
      *
      * @return OrganizationEntry
      */
-    private function organization(array $item, ResponseHelper $response, ResultPage $page, array $card, string $lang): OrganizationEntry
+    private function organization(array $item, ResponseHelper $response, ResultPage $page, DirectoryConfig $config, string $lang): OrganizationEntry
     {
+        $card = $config->card;
         $attributes = self::attributes($item);
         $org_type = $card['org_type'] ? self::text($attributes['type'] ?? null) : '';
+        $values = $this->shared_values($item, $attributes, $response, $page, $card, $lang, $card['logo']);
 
         return new OrganizationEntry(
-            ...$this->shared_values($item, $attributes, $response, $page, $card, $lang, $card['logo']),
+            ...$values,
             name: self::localized($attributes, 'legal_name', $lang),
             org_type: $org_type,
             org_type_label: $org_type !== '' ? ($this->labels->org_types($lang)[$org_type] ?? $org_type) : '',
             description: $card['description'] ? self::localized($attributes, 'description', $lang) : '',
+            contacts: $this->org_contacts($values['id'], $page, $config->org_contact(), $lang),
         );
+    }
+
+    /**
+     * An organization's Organization Contacts, from the page's batch.
+     *
+     * Each person gets only what the section shows: the name, the job title,
+     * the relationship type labels (when types qualified them), and their
+     * email and phone through ContactResolver with the section's rules. A
+     * person with nothing to show, or missing from the batch, is left out.
+     *
+     * @param string                    $id       Organization UUID.
+     * @param ResultPage                $page     The page, with the contacts batch.
+     * @param array<string, mixed>|null $settings DirectoryConfig::org_contact(); null when the section is off.
+     * @param string                    $lang     Language code.
+     *
+     * @return list<Contact>
+     */
+    private function org_contacts(string $id, ResultPage $page, ?array $settings, string $lang): array
+    {
+        $refs = $settings !== null && $id !== '' ? $page->org_contacts_for($id) : [];
+
+        if ($refs === []) {
+            return [];
+        }
+
+        $people = [];
+
+        foreach ($page->contact_people as $person) {
+            if (is_string($person['id'] ?? null)) {
+                $people[$person['id']] ??= $person;
+            }
+        }
+
+        $records = new ResponseHelper(['data' => array_values($people), 'included' => $page->contact_included]);
+        $labels = $settings['relationship'] ? $this->labels->relationship_types($lang) : [];
+        $contacts = [];
+
+        foreach ($refs as $ref) {
+            $person = $people[$ref['person'] ?? ''] ?? null;
+
+            if ($person === null) {
+                continue;
+            }
+
+            $attributes = self::attributes($person);
+            $name = self::join(' ', [self::text($attributes['given_name'] ?? null), self::text($attributes['family_name'] ?? null)])
+                ?: self::text($attributes['full_name'] ?? null);
+            $found = [];
+
+            foreach (DirectoryConfig::ORG_CONTACT_RECORDS as $field) {
+                $list = $settings[$field]['show'] ? $records->getIncludedRelationship($person, ContactResolver::RELATIONSHIPS[$field]) : [];
+                $list = is_array($list) && isset($list['type']) ? [$list] : $list;
+                $found[$field] = ContactResolver::resolve($field, is_array($list) ? $list : [], $settings[$field]);
+            }
+
+            $types = is_array($ref['types'] ?? null) ? array_filter($ref['types'], 'is_string') : [];
+
+            $contact = [
+                'id'           => self::text($person['id'] ?? null),
+                'name'         => $settings['name'] ? $name : '',
+                'title'        => $settings['title'] ? self::text($attributes['job_title'] ?? null) : '',
+                'relationship' => implode(', ', array_unique(array_map(static fn (string $type): string => $labels[$type] ?? $type, $settings['relationship'] ? $types : []))),
+                'emails'       => self::emails($found['email']),
+                'phones'       => self::phones($found['phone']),
+            ];
+
+            if ($contact['name'] !== '' || $contact['title'] !== '' || $contact['emails'] !== [] || $contact['phones'] !== []) {
+                $contacts[] = $contact;
+            }
+        }
+
+        return $contacts;
     }
 
     /**

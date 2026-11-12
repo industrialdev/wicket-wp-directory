@@ -16,6 +16,7 @@ namespace Wicket\Directory\Api;
  *
  * @phpstan-type Tier array{id: string, slug: string, name: string}
  * @phpstan-type Membership array{role: string, active: bool|null, start_date: string, end_date: string|null}
+ * @phpstan-type OrgContactRef array{person: string, types: list<string>}
  */
 final class ResultPage
 {
@@ -39,6 +40,15 @@ final class ResultPage
      * @param array<string, Membership>   $group_members One `group_members` row per person UUID, for a
      *                                                   group's member list whose card shows a role,
      *                                                   status or date. People without a row are left out.
+     * @param array<string, list<OrgContactRef>> $org_contacts The people each organization's card lists
+     *                                                   under Organization Contact, keyed by organization
+     *                                                   UUID, in display order, with the relationship
+     *                                                   types that qualified them. Only filled when the
+     *                                                   card shows the section; organizations with nobody
+     *                                                   are left out.
+     * @param list<array<string, mixed>>  $contact_people   The `people` resources of $org_contacts.
+     * @param list<array<string, mixed>>  $contact_included Their emails and phones, when the section shows
+     *                                                      either.
      */
     public function __construct(
         public readonly array $items,
@@ -51,6 +61,9 @@ final class ResultPage
         public readonly bool $unavailable = false,
         public readonly array $member_counts = [],
         public readonly array $group_members = [],
+        public readonly array $org_contacts = [],
+        public readonly array $contact_people = [],
+        public readonly array $contact_included = [],
     ) {}
 
     /**
@@ -125,6 +138,10 @@ final class ResultPage
             // Pages cached before groups existed have no counts, nor member rows.
             is_array($data['member_counts'] ?? null) ? array_filter($data['member_counts'], 'is_int') : [],
             is_array($data['group_members'] ?? null) ? array_filter($data['group_members'], 'is_array') : [],
+            // Nor do pages cached before Organization Contact.
+            is_array($data['org_contacts'] ?? null) ? array_filter($data['org_contacts'], 'is_array') : [],
+            self::records($data['contact_people'] ?? null),
+            self::records($data['contact_included'] ?? null),
         );
     }
 
@@ -133,20 +150,23 @@ final class ResultPage
      *
      * Unavailable pages are never cached, so the flag isn't part of it.
      *
-     * @return array{items: list<array<string, mixed>>, included: list<array<string, mixed>>, total: int, page: int, total_pages: int, per_page: int, tiers: array<string, list<Tier>>, member_counts: array<string, int>, group_members: array<string, Membership>}
+     * @return array{items: list<array<string, mixed>>, included: list<array<string, mixed>>, total: int, page: int, total_pages: int, per_page: int, tiers: array<string, list<Tier>>, member_counts: array<string, int>, group_members: array<string, Membership>, org_contacts: array<string, list<OrgContactRef>>, contact_people: list<array<string, mixed>>, contact_included: list<array<string, mixed>>}
      */
     public function to_array(): array
     {
         return [
-            'items'       => $this->items,
-            'included'    => $this->included,
-            'total'       => $this->total,
-            'page'        => $this->page,
-            'total_pages' => $this->total_pages,
-            'per_page'    => $this->per_page,
-            'tiers'         => $this->tiers,
-            'member_counts' => $this->member_counts,
-            'group_members' => $this->group_members,
+            'items'            => $this->items,
+            'included'         => $this->included,
+            'total'            => $this->total,
+            'page'             => $this->page,
+            'total_pages'      => $this->total_pages,
+            'per_page'         => $this->per_page,
+            'tiers'            => $this->tiers,
+            'member_counts'    => $this->member_counts,
+            'group_members'    => $this->group_members,
+            'org_contacts'     => $this->org_contacts,
+            'contact_people'   => $this->contact_people,
+            'contact_included' => $this->contact_included,
         ];
     }
 
@@ -201,7 +221,7 @@ final class ResultPage
      */
     public function with_tiers(array $tiers): self
     {
-        return new self($this->items, $this->included, $this->total, $this->page, $this->total_pages, $this->per_page, $tiers, $this->unavailable, $this->member_counts, $this->group_members);
+        return $this->copy(['tiers' => $tiers]);
     }
 
     /**
@@ -213,7 +233,7 @@ final class ResultPage
      */
     public function with_member_counts(array $member_counts): self
     {
-        return new self($this->items, $this->included, $this->total, $this->page, $this->total_pages, $this->per_page, $this->tiers, $this->unavailable, $member_counts, $this->group_members);
+        return $this->copy(['member_counts' => $member_counts]);
     }
 
     /**
@@ -225,7 +245,37 @@ final class ResultPage
      */
     public function with_group_members(array $group_members): self
     {
-        return new self($this->items, $this->included, $this->total, $this->page, $this->total_pages, $this->per_page, $this->tiers, $this->unavailable, $this->member_counts, $group_members);
+        return $this->copy(['group_members' => $group_members]);
+    }
+
+    /**
+     * A copy with other Organization Contacts.
+     *
+     * @param array<string, list<OrgContactRef>> $org_contacts The people per organization UUID.
+     * @param list<array<string, mixed>>         $people       Their `people` resources.
+     * @param list<array<string, mixed>>         $included     Their emails and phones.
+     *
+     * @return self
+     */
+    public function with_org_contacts(array $org_contacts, array $people, array $included = []): self
+    {
+        return $this->copy([
+            'org_contacts'     => $org_contacts,
+            'contact_people'   => self::records($people),
+            'contact_included' => self::records($included),
+        ]);
+    }
+
+    /**
+     * The people one organization's card lists under Organization Contact.
+     *
+     * @param string $id Organization UUID.
+     *
+     * @return list<OrgContactRef>
+     */
+    public function org_contacts_for(string $id): array
+    {
+        return $this->org_contacts[$id] ?? [];
     }
 
     /**
@@ -250,6 +300,18 @@ final class ResultPage
     public function member_count_for(string $id): ?int
     {
         return $this->member_counts[$id] ?? null;
+    }
+
+    /**
+     * A copy with some properties changed.
+     *
+     * @param array<string, mixed> $changes Constructor arguments, keyed by name.
+     *
+     * @return self
+     */
+    private function copy(array $changes): self
+    {
+        return new self(...$changes + get_object_vars($this));
     }
 
     /**
