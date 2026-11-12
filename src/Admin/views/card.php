@@ -17,6 +17,8 @@
  *   source, relationship types, what each contact shows, and an email and a
  *   phone contact rule of its own, nested. The script shows the hint of the
  *   chosen source (`data-wd-mode`).
+ * - A person card's Employer (`employer`) reveals the relationship types that
+ *   count and whether the type shows next to the organization.
  *
  * Only the saved type's settings are printed. While the type select differs
  * from the saved type, the script swaps them for the `data-wd-type-changed`
@@ -48,6 +50,7 @@
  *     resource_types_failed: bool,
  *     address_formats: array<string, string>,
  *     org_contact: array{sources: array<string, string>, types: array<string, string>, hints: array<string, string>, toggles: array<string, string>, records: array<string, array{label: string, noun: string, types: array<string, string>}>}|null,
+ *     employer?: array{types: array<string, string>, hint: string}|null,
  * } $args
  */
 
@@ -203,6 +206,41 @@ $hint_state = static fn (array $rule): string => match (true) {
                         'website_label'   => $card['website_label'],
                     ]);
                     ?>
+
+                <?php elseif ($key === 'employer' && ($args['employer'] ?? null) !== null) : ?>
+                    <?php
+                    $employer = $card['employer'];
+                    $employer_name = $name . '[employer]';
+                    ?>
+                    <div class="wd-item" data-wd-item="employer">
+                        <input type="hidden" name="<?php echo esc_attr($employer_name); ?>[show]" value="0">
+                        <label class="wd-check">
+                            <input type="checkbox" name="<?php echo esc_attr($employer_name); ?>[show]" value="1" data-wd-reveal-toggle <?php checked($employer['show']); ?>>
+                            <?php esc_html_e('Employer', 'wicket-directory'); ?>
+                        </label>
+                        <p class="wd-help wd-indent"><?php esc_html_e('The organizations the person has an active relationship with, under the job title. Adds one API request per page of results.', 'wicket-directory'); ?></p>
+                        <div class="wd-indent" data-wd-reveal>
+                            <p class="wd-sublabel"><?php esc_html_e('Relationship types', 'wicket-directory'); ?></p>
+                            <?php if ($args['employer']['types'] !== []) : ?>
+                                <?php
+                                $chip_picker([
+                                    'name'     => $employer_name . '[relationship_types][]',
+                                    'label'    => __('Relationship types', 'wicket-directory'),
+                                    'choices'  => ['' => $args['employer']['types']],
+                                    'selected' => $employer['relationship_types'],
+                                ]);
+                                ?>
+                            <?php elseif (!$args['resource_types_failed']) : ?>
+                                <p><?php esc_html_e('No relationship types were found.', 'wicket-directory'); ?></p>
+                            <?php endif; ?>
+                            <p class="wd-help"><?php echo esc_html($args['employer']['hint']); ?></p>
+                            <input type="hidden" name="<?php echo esc_attr($employer_name); ?>[relationship]" value="0">
+                            <label class="wd-check">
+                                <input type="checkbox" name="<?php echo esc_attr($employer_name); ?>[relationship]" value="1" <?php checked($employer['relationship']); ?>>
+                                <?php esc_html_e('Relationship type, next to the organization', 'wicket-directory'); ?>
+                            </label>
+                        </div>
+                    </div>
 
                 <?php elseif ($key === 'org_contact' && ($args['org_contact'] ?? null) !== null) : ?>
                     <?php

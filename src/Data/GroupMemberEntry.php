@@ -16,6 +16,7 @@ namespace Wicket\Directory\Data;
  * cards/card-group-member shows them.
  *
  * @phpstan-import-type Phone from Entry
+ * @phpstan-import-type Employer from Entry
  */
 final class GroupMemberEntry extends PersonEntry
 {
@@ -63,6 +64,7 @@ final class GroupMemberEntry extends PersonEntry
      * @param string                  $end_date     The row's `end_date`, `Y-m-d`; END_PRESENT when
      *                                              the term is open-ended.
      * @param array<array-key, mixed> $extra        Free-form data for custom templates.
+     * @param list<Employer>          $employers    The person's employers; see PersonEntry.
      */
     public function __construct(
         string $id,
@@ -89,6 +91,7 @@ final class GroupMemberEntry extends PersonEntry
         public readonly string $start_date = '',
         public readonly string $end_date = '',
         array $extra = [],
+        array $employers = [],
     ) {
         parent::__construct(
             $id,
@@ -110,6 +113,7 @@ final class GroupMemberEntry extends PersonEntry
             $post_nominal,
             $job_title,
             $extra,
+            $employers,
         );
     }
 

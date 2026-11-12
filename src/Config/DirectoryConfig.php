@@ -25,6 +25,7 @@ use WP_Post;
  * @phpstan-type Facet array{source: string, schema_key: string, field: string, label: string}
  * @phpstan-type Roster array{default_view: string, group: string, member_status: string}
  * @phpstan-type OrgContact array{show: bool, source: string, relationship_types: list<string>, name: bool, title: bool, relationship: bool, email: ContactRule, phone: ContactRule}
+ * @phpstan-type EmployerSettings array{show: bool, relationship_types: list<string>, relationship: bool}
  */
 final class DirectoryConfig
 {
@@ -354,6 +355,26 @@ final class DirectoryConfig
     }
 
     /**
+     * The Employer settings of a person card, when it shows Employer.
+     *
+     * @param bool $members The Group Member card (a group directory's member
+     *                      lists) instead of the individual card.
+     *
+     * @return EmployerSettings|null Null for a card without Employer (organizations, groups), or when it's off.
+     */
+    public function employer(bool $members = false): ?array
+    {
+        $card = match (true) {
+            $members                                  => $this->type === DirectoryType::Group ? $this->member_card : [],
+            $this->type === DirectoryType::Individual => $this->card,
+            default                                   => [],
+        };
+        $employer = $card['employer'] ?? null;
+
+        return is_array($employer) && $employer['show'] === true ? $employer : null;
+    }
+
+    /**
      * Default eligibility: active members (or, for groups, active groups) only,
      * no other conditions.
      *
@@ -425,7 +446,9 @@ final class DirectoryConfig
     /**
      * Default card for a directory type.
      *
-     * Personal contact details are off by default for individuals. Groups
+     * Personal contact details are off by default for individuals, and so is
+     * Employer (`employer`, the person's organizations from their active
+     * relationships). Groups
      * have no contact records, member ID, tiers or data fields, so their card
      * has only its own toggles.
      *
@@ -451,6 +474,7 @@ final class DirectoryConfig
                 'suffix'        => false,
                 'post_nominal'  => self::empty_ref(),
                 'job_title'     => true,
+                'employer'      => self::employer_defaults(),
                 'profile_image' => self::empty_ref(),
                 'address'       => self::contact_rule(true),
                 'email'         => self::contact_rule(false),
@@ -519,6 +543,43 @@ final class DirectoryConfig
             'relationship'       => true,
             'email'              => self::contact_rule(false),
             'phone'              => self::contact_rule(false),
+        ];
+    }
+
+    /**
+     * Default Employer: off, so person cards saved before it existed render
+     * without it.
+     *
+     * When turned on, any active relationship to an organization counts until
+     * types are chosen, and the relationship type isn't shown.
+     *
+     * @return EmployerSettings
+     */
+    private static function employer_defaults(): array
+    {
+        return [
+            'show'               => false,
+            'relationship_types' => [],
+            'relationship'       => false,
+        ];
+    }
+
+    /**
+     * Sanitize the Employer settings.
+     *
+     * @param mixed            $value   Raw settings.
+     * @param EmployerSettings $default Their defaults.
+     *
+     * @return EmployerSettings
+     */
+    private static function sanitize_employer(mixed $value, array $default): array
+    {
+        $value = is_array($value) ? $value : [];
+
+        return [
+            'show'               => self::bool($value['show'] ?? null, $default['show']),
+            'relationship_types' => self::identifier_list($value['relationship_types'] ?? null),
+            'relationship'       => self::bool($value['relationship'] ?? null, $default['relationship']),
         ];
     }
 
@@ -684,6 +745,7 @@ final class DirectoryConfig
                 $key === 'website_label'                   => is_string($value) ? sanitize_text_field($value) : $default,
                 $key === 'tag_chips'                       => self::data_field_list($value),
                 $key === 'org_contact'                     => self::sanitize_org_contact($value, $default),
+                $key === 'employer'                        => self::sanitize_employer($value, $default),
                 is_bool($default)                          => self::bool($value, $default),
                 // The remaining keys are single data-field references.
                 default                                    => self::sanitize_data_field_ref($value),

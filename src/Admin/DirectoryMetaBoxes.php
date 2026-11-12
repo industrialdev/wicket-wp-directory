@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Wicket\Directory\Admin;
 
 use Wicket\Directory\Api\OrganizationContacts;
+use Wicket\Directory\Api\PersonEmployers;
 use Wicket\Directory\Config\DirectoryConfig;
 use Wicket\Directory\Config\DirectoryType;
 use Wicket\Directory\Data\ContactResolver;
@@ -455,11 +456,26 @@ final class DirectoryMetaBoxes
             ];
         }
 
+        $employer = null;
+
+        if (isset($card['employer'])) {
+            $employer = [
+                /* translators: %s: Relationship type slug. */
+                'types' => self::with_saved($this->resource_types->for(EnumLabels::RELATIONSHIP_TYPES, $lang), $card['employer']['relationship_types'], __('Unknown type (%s)', 'wicket-directory')),
+                'hint'  => sprintf(
+                    /* translators: %d: The most organizations one card lists. */
+                    __('Only relationships of the chosen types count, or of any type when none is chosen. Up to %d organizations per card.', 'wicket-directory'),
+                    PersonEmployers::MAX_PER_PERSON,
+                ),
+            ];
+        }
+
         return [
             'field'                 => self::FIELD,
             'config'                => $config,
             'card'                  => $card,
             'org_contact'           => $org_contact,
+            'employer'              => $employer,
             'groups'                => $groups,
             'toggles'               => $fields['toggles'],
             'refs'                  => $refs,
@@ -467,7 +483,7 @@ final class DirectoryMetaBoxes
             'tag_values'            => $tag_values,
             'schemas_failed'        => $fields['refs'] !== [] && $this->schema_fields->failed(),
             'contacts'              => $contacts,
-            'resource_types_failed' => ($contacts !== [] || $org_contact !== null) && $this->resource_types->failed(),
+            'resource_types_failed' => ($contacts !== [] || $org_contact !== null || $employer !== null) && $this->resource_types->failed(),
             'address_formats'       => [
                 'full'                  => __('Full address', 'wicket-directory'),
                 'city_province_country' => __('City, province/state, country', 'wicket-directory'),
@@ -661,8 +677,8 @@ final class DirectoryMetaBoxes
                 ] + $shared,
                 'refs'     => [
                     'post_nominal'  => [
-                        'label'       => __('Post-nominal letters', 'wicket-directory'),
-                        'description' => __('A data field shown after the name, e.g. "Jane Doe, PhD".', 'wicket-directory'),
+                        'label'       => __('Designation', 'wicket-directory'),
+                        'description' => __('A data field shown after the name, such as post-nominal letters: "Jane Doe, PhD". Nothing is added when it\'s empty.', 'wicket-directory'),
                         'kinds'       => $any,
                     ],
                     'profile_image' => ['label' => __('Profile image', 'wicket-directory')] + $image,
@@ -709,8 +725,8 @@ final class DirectoryMetaBoxes
      * divider between groups.
      *
      * Every key of card_fields() is in exactly one group, plus `tag_chips`
-     * (not for groups) and `org_contact` (organizations only), which have
-     * controls of their own. `address_format` and `website_label` are shown
+     * (not for groups), `org_contact` (organizations only) and `employer`
+     * (individuals and group members), which have controls of their own. `address_format` and `website_label` are shown
      * under their contact rule.
      *
      * @param DirectoryType $type Directory type.
@@ -730,7 +746,7 @@ final class DirectoryMetaBoxes
         return match ($type) {
             DirectoryType::Individual => [
                 ['profile_image', 'salutation', 'post_nominal', 'middle_name', 'suffix'],
-                ['job_title'],
+                ['job_title', 'employer'],
                 ...$shared,
             ],
             DirectoryType::Organization => [

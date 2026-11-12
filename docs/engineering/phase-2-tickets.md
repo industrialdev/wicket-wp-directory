@@ -24,7 +24,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | P2.3 | [Group roster page: Default View, Back to Directory, own search, filters, sort and paging](#p23) | P2.2 | Done |
 | P2.4 | [Group Member card, with its own card config and facets](#p24) | P2.3 | Done |
 | P2.5 | [Organization Contact on the org card (Membership Owner / Relationship Types)](#p25) | P2.0 | Done |
-| P2.6 | [Individual card: Employer, Designation and relationship types](#p26) | P2.0 | To do |
+| P2.6 | [Individual card: Employer, Designation and relationship types](#p26) | P2.0 | Done |
 | P2.7 | [Merge-tag card template engine (`[col]` / `{{field}}`)](#p27) | P2.4, P2.5, P2.6 | To do |
 | P2.8 | [Admin Advance Configurations editor](#p28) | P2.7 | To do |
 | P2.9 | [Developer tab: custom code switch, notes, hook reference and custom fields](#p29) | — | To do |
@@ -234,6 +234,18 @@ Add the individual-card fields the prototype has but the MVP left out (see 5.5 i
 
 - Backwards compatible: existing individual configs render as before.
 - Unit tests for the mapper and the card.
+
+**Outcome (2026-11-12):**
+
+- **Primary organization (the open question): not supported.** `primary_organization` is null for every person on staging and nothing in the stack reads it, so it can't be verified. Employer is built from active connections only. It can be added later as a source if a tenant turns out to use it.
+- **Config.** The individual card gains `employer`: `show` (off by default, so configs saved before this read back and render as before), `relationship_types` (slugs; empty = any active person ⟷ organization relationship counts) and `relationship` (show the type label next to the organization; off). The Group Member card gets the same key through the individual card's keys, as P2.4 planned, with its own settings. `DirectoryConfig::employer()` returns the individual card's settings when on, `employer(true)` the Group Member card's (group directories only); else null. Organization and group cards have no key; a type change resets it with the rest of the card.
+- **Batch.** New `Api\PersonEmployers`, called from `DirectoryRepository::fetch()` (individual) and `fetch_roster()` (Group Member card): one `connections/query` per page (`connection_type_eq`, `person_uuid_in` the page's people, `active_eq: true`, `resource_type_slug_in` when types are chosen; `include=organization`, size 2000). Rows of other types or inactive rows are ignored in PHP too. An organization with several matching relationships is listed once with every type. Order: the first matching type in the admin's order (when types are chosen), then the organization's name in the current language. At most `PersonEmployers::MAX_PER_PERSON` (5) per card: one staging person has 17 connections. Stored on `ResultPage` (`employers`, `employer_organizations`, only the organizations a card names) and cached with the page. A failed batch is logged; the page shows without employers and isn't cached. Pages cached before this read back without employers.
+- **Data.** `PersonEntry::$employers` (after `$extra`, so positional callers are unaffected; `GroupMemberEntry` passes it through): a list of `{id, name, relationship}`. Name is `legal_name_{lang}`, else `legal_name`, else `legal_name_en`; an organization with no name is left out. `relationship` is the comma-joined type labels (`EnumLabels::relationship_types()`, slug when unlabelled), empty when the card hides it. The entry filters get `employers`; `Entry::with()` keeps each one in that shape and drops any without a name.
+- **Designation** is the existing `post_nominal` data field, which already appends ", {value}" to the name and adds nothing when empty. No new key: the Card View item is relabelled "Designation", with "post-nominal letters" in its description.
+- **"Display Contact Details" parent toggle: not added.** Each contact rule (address, email, phone, website) already has its own Show toggle, and the Contact column disappears when all are empty, so a parent toggle would only duplicate them.
+- **Template.** `cards/card-individual` and `cards/card-group-member` list the employers in the Details column after the job title (and before the Group Member card's dates): one `wicket-directory-card__employer` per organization, with `__employer-name` and, when set, `__employer-relationship` (muted) on the same line. The Details column now shows for employers alone. `directory.css` adds the row; tokens only.
+- **Admin.** An "Employer" item after Job title in the individual card's Card View, and in the Group Member card's: a Show checkbox that reveals a relationship-type chip picker (from `resource_types`; a saved type the MDP no longer lists stays, marked), a hint, and the "Relationship type, next to the organization" toggle. `admin.js` needed no change (a generic `data-wd-item`).
+- **Checked** on the local stack against staging (`wp eval-file`, directory 1818 saved before this ticket, config built in memory, cache off): it reads back with Employer off; on, it adds one `connections/query` per page; with any type, 3 of 50 people show employers (Rob Ferguson hits the cap of 5); `employee` only, 2; French names and labels (Employé, Contact général); on group 1897's member lists, one Test Group member shows an employer. Not checked in a browser: the admin item and the card's look.
 
 ## 3. Advanced card editor
 

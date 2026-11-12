@@ -24,6 +24,8 @@ use Wicket\ResponseHelper;
  * @phpstan-import-type DataFieldRef from DirectoryConfig
  * @phpstan-import-type Phone from Entry
  * @phpstan-import-type Contact from Entry
+ * @phpstan-import-type Employer from Entry
+ * @phpstan-import-type EmployerSettings from DirectoryConfig
  */
 final class EntryMapper
 {
@@ -211,7 +213,7 @@ final class EntryMapper
      *
      * @param array<string, mixed> $item     `people` resource.
      * @param ResponseHelper       $response The page, for included records.
-     * @param ResultPage           $page     The page, for tiers.
+     * @param ResultPage           $page     The page, for tiers and employers.
      * @param array<string, mixed> $card     The card's toggles, in the individual card's shape.
      * @param string               $lang     Language code.
      *
@@ -231,7 +233,9 @@ final class EntryMapper
             ? self::join(' ', [$salutation, $given_name, $middle_name, $family_name, $suffix])
             : self::text($attributes['full_name'] ?? null);
 
-        return $this->shared_values($item, $attributes, $response, $page, $card, $lang, $card['profile_image']) + [
+        $values = $this->shared_values($item, $attributes, $response, $page, $card, $lang, $card['profile_image']);
+
+        return $values + [
             'name'         => $name,
             'salutation'   => $salutation,
             'given_name'   => $given_name,
@@ -240,7 +244,61 @@ final class EntryMapper
             'suffix'       => $suffix,
             'post_nominal' => implode(', ', $this->data_field_labels($attributes, $card['post_nominal'], $lang)),
             'job_title'    => $card['job_title'] ? self::text($attributes['job_title'] ?? null) : '',
+            'employers'    => $this->employers($values['id'], $page, $card['employer'], $lang),
         ];
+    }
+
+    /**
+     * A person's employers, from the page's batch.
+     *
+     * Each organization gets its legal name in the current language and, when
+     * the card shows it, the labels of the relationship types that qualified
+     * it. An organization with no name, or missing from the batch, is left out.
+     *
+     * @param string           $id       Person UUID.
+     * @param ResultPage       $page     The page, with the employer batch.
+     * @param EmployerSettings $settings The card's Employer settings.
+     * @param string           $lang     Language code.
+     *
+     * @return list<Employer>
+     */
+    private function employers(string $id, ResultPage $page, array $settings, string $lang): array
+    {
+        $refs = $settings['show'] && $id !== '' ? $page->employers_for($id) : [];
+
+        if ($refs === []) {
+            return [];
+        }
+
+        $organizations = [];
+
+        foreach ($page->employer_organizations as $organization) {
+            if (is_string($organization['id'] ?? null)) {
+                $organizations[$organization['id']] ??= $organization;
+            }
+        }
+
+        $labels = $settings['relationship'] ? $this->labels->relationship_types($lang) : [];
+        $employers = [];
+
+        foreach ($refs as $ref) {
+            $organization = $organizations[$ref['organization'] ?? ''] ?? null;
+            $name = $organization !== null ? self::localized(self::attributes($organization), 'legal_name', $lang) : '';
+
+            if ($name === '') {
+                continue;
+            }
+
+            $types = $settings['relationship'] && is_array($ref['types'] ?? null) ? array_filter($ref['types'], 'is_string') : [];
+
+            $employers[] = [
+                'id'           => self::text($organization['id'] ?? null),
+                'name'         => $name,
+                'relationship' => implode(', ', array_unique(array_map(static fn (string $type): string => $labels[$type] ?? $type, $types))),
+            ];
+        }
+
+        return $employers;
     }
 
     /**

@@ -17,6 +17,7 @@ namespace Wicket\Directory\Data;
  *
  * @phpstan-type Phone array{number: string, extension: string, uri: string}
  * @phpstan-type Contact array{id: string, name: string, title: string, relationship: string, emails: list<string>, phones: list<Phone>}
+ * @phpstan-type Employer array{id: string, name: string, relationship: string}
  */
 abstract class Entry
 {
@@ -54,6 +55,11 @@ abstract class Entry
      * Shape of a list of Contact arrays (a person listed on the card).
      */
     protected const SHAPE_CONTACTS = 'contacts';
+
+    /**
+     * Shape of a list of Employer arrays (an organization a person works with).
+     */
+    protected const SHAPE_EMPLOYERS = 'employers';
 
     /**
      * @param string                   $id        Person, organization or group UUID.
@@ -179,7 +185,8 @@ abstract class Entry
                 static fn (array $lines): bool => $lines !== [],
             )),
             self::SHAPE_PHONES   => array_values(array_filter(array_map(self::phone(...), $value))),
-            self::SHAPE_CONTACTS => array_values(array_filter(array_map(self::contact(...), $value))),
+            self::SHAPE_CONTACTS  => array_values(array_filter(array_map(self::contact(...), $value))),
+            self::SHAPE_EMPLOYERS => array_values(array_filter(array_map(self::employer(...), $value))),
             default              => $value,
         };
     }
@@ -231,6 +238,28 @@ abstract class Entry
         $shown = $contact['name'] !== '' || $contact['title'] !== '' || $contact['emails'] !== [] || $contact['phones'] !== [];
 
         return $shown ? $contact : null;
+    }
+
+    /**
+     * An employer in the Employer shape.
+     *
+     * @param mixed $value Raw employer.
+     *
+     * @return Employer|null Null when it has no name.
+     */
+    private static function employer(mixed $value): ?array
+    {
+        $name = is_array($value) ? self::string($value['name'] ?? null) : null;
+
+        if ($name === null || $name === '') {
+            return null;
+        }
+
+        return [
+            'id'           => self::string($value['id'] ?? null) ?? '',
+            'name'         => $name,
+            'relationship' => self::string($value['relationship'] ?? null) ?? '',
+        ];
     }
 
     /**

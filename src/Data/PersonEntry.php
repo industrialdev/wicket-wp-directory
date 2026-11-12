@@ -14,6 +14,7 @@ namespace Wicket\Directory\Data;
  * GroupMemberEntry extends it with a member's role, status and term in a group.
  *
  * @phpstan-import-type Phone from Entry
+ * @phpstan-import-type Employer from Entry
  */
 class PersonEntry extends Entry
 {
@@ -38,6 +39,12 @@ class PersonEntry extends Entry
      * @param string                  $post_nominal Post-nominal data-field label(s), comma-separated.
      * @param string                  $job_title    `job_title`.
      * @param array<array-key, mixed> $extra        Free-form data for custom templates.
+     * @param list<Employer>          $employers    Employer: the organizations the person has an active
+     *                                              relationship with (of the card's chosen types), in
+     *                                              order, each with its legal name in the current
+     *                                              language and, when the card shows it, the
+     *                                              relationship type label(s). Empty when the card hides
+     *                                              Employer or there is none.
      */
     public function __construct(
         string $id,
@@ -59,6 +66,7 @@ class PersonEntry extends Entry
         public readonly string $post_nominal,
         public readonly string $job_title,
         array $extra = [],
+        public readonly array $employers = [],
     ) {
         parent::__construct($id, $name, $member_id, $tiers, $addresses, $emails, $phones, $websites, $image_url, $eyebrow, $tags, $extra);
     }
@@ -76,6 +84,7 @@ class PersonEntry extends Entry
             'suffix'       => self::SHAPE_STRING,
             'post_nominal' => self::SHAPE_STRING,
             'job_title'    => self::SHAPE_STRING,
+            'employers'    => self::SHAPE_EMPLOYERS,
         ];
     }
 }

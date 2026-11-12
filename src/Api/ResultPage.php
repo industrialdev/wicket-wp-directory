@@ -17,6 +17,7 @@ namespace Wicket\Directory\Api;
  * @phpstan-type Tier array{id: string, slug: string, name: string}
  * @phpstan-type Membership array{role: string, active: bool|null, start_date: string, end_date: string|null}
  * @phpstan-type OrgContactRef array{person: string, types: list<string>}
+ * @phpstan-type EmployerRef array{organization: string, types: list<string>}
  */
 final class ResultPage
 {
@@ -49,6 +50,12 @@ final class ResultPage
      * @param list<array<string, mixed>>  $contact_people   The `people` resources of $org_contacts.
      * @param list<array<string, mixed>>  $contact_included Their emails and phones, when the section shows
      *                                                      either.
+     * @param array<string, list<EmployerRef>> $employers The organizations each person's card lists under
+     *                                                   Employer, keyed by person UUID, in display order,
+     *                                                   with the relationship types that qualified them.
+     *                                                   Only filled when the card shows Employer; people
+     *                                                   with none are left out.
+     * @param list<array<string, mixed>>  $employer_organizations The `organizations` resources of $employers.
      */
     public function __construct(
         public readonly array $items,
@@ -64,6 +71,8 @@ final class ResultPage
         public readonly array $org_contacts = [],
         public readonly array $contact_people = [],
         public readonly array $contact_included = [],
+        public readonly array $employers = [],
+        public readonly array $employer_organizations = [],
     ) {}
 
     /**
@@ -142,6 +151,9 @@ final class ResultPage
             is_array($data['org_contacts'] ?? null) ? array_filter($data['org_contacts'], 'is_array') : [],
             self::records($data['contact_people'] ?? null),
             self::records($data['contact_included'] ?? null),
+            // Nor do pages cached before Employer.
+            is_array($data['employers'] ?? null) ? array_filter($data['employers'], 'is_array') : [],
+            self::records($data['employer_organizations'] ?? null),
         );
     }
 
@@ -150,23 +162,25 @@ final class ResultPage
      *
      * Unavailable pages are never cached, so the flag isn't part of it.
      *
-     * @return array{items: list<array<string, mixed>>, included: list<array<string, mixed>>, total: int, page: int, total_pages: int, per_page: int, tiers: array<string, list<Tier>>, member_counts: array<string, int>, group_members: array<string, Membership>, org_contacts: array<string, list<OrgContactRef>>, contact_people: list<array<string, mixed>>, contact_included: list<array<string, mixed>>}
+     * @return array{items: list<array<string, mixed>>, included: list<array<string, mixed>>, total: int, page: int, total_pages: int, per_page: int, tiers: array<string, list<Tier>>, member_counts: array<string, int>, group_members: array<string, Membership>, org_contacts: array<string, list<OrgContactRef>>, contact_people: list<array<string, mixed>>, contact_included: list<array<string, mixed>>, employers: array<string, list<EmployerRef>>, employer_organizations: list<array<string, mixed>>}
      */
     public function to_array(): array
     {
         return [
-            'items'            => $this->items,
-            'included'         => $this->included,
-            'total'            => $this->total,
-            'page'             => $this->page,
-            'total_pages'      => $this->total_pages,
-            'per_page'         => $this->per_page,
-            'tiers'            => $this->tiers,
-            'member_counts'    => $this->member_counts,
-            'group_members'    => $this->group_members,
-            'org_contacts'     => $this->org_contacts,
-            'contact_people'   => $this->contact_people,
-            'contact_included' => $this->contact_included,
+            'items'                  => $this->items,
+            'included'               => $this->included,
+            'total'                  => $this->total,
+            'page'                   => $this->page,
+            'total_pages'            => $this->total_pages,
+            'per_page'               => $this->per_page,
+            'tiers'                  => $this->tiers,
+            'member_counts'          => $this->member_counts,
+            'group_members'          => $this->group_members,
+            'org_contacts'           => $this->org_contacts,
+            'contact_people'         => $this->contact_people,
+            'contact_included'       => $this->contact_included,
+            'employers'              => $this->employers,
+            'employer_organizations' => $this->employer_organizations,
         ];
     }
 
@@ -276,6 +290,34 @@ final class ResultPage
     public function org_contacts_for(string $id): array
     {
         return $this->org_contacts[$id] ?? [];
+    }
+
+    /**
+     * A copy with other employers.
+     *
+     * @param array<string, list<EmployerRef>> $employers     The organizations per person UUID.
+     * @param list<array<string, mixed>>       $organizations Their `organizations` resources.
+     *
+     * @return self
+     */
+    public function with_employers(array $employers, array $organizations): self
+    {
+        return $this->copy([
+            'employers'              => $employers,
+            'employer_organizations' => self::records($organizations),
+        ]);
+    }
+
+    /**
+     * The organizations one person's card lists under Employer.
+     *
+     * @param string $id Person UUID.
+     *
+     * @return list<EmployerRef>
+     */
+    public function employers_for(string $id): array
+    {
+        return $this->employers[$id] ?? [];
     }
 
     /**

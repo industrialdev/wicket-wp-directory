@@ -492,7 +492,7 @@ $client->post('connections/query?page%5Bsize%5D=2000&include=organization', ['js
 
 Map each row with `relationships.person.data.id` and `relationships.organization.data.id`, then read `legal_name_{lang}` from `included[type=organizations]`.
 
-**The primary organization is unverified.** People have a `primary_organization` relationship, but it's `null` for all 175 people on staging, also through `GET people/{uuid}` and with `include=primary_organization`. No stack package reads it. P2.6 has to decide whether "primary organization" is worth supporting at all (see [Phase 2 corrections](#phase-2-corrections), item 7).
+**The primary organization is unverified.** People have a `primary_organization` relationship, but it's `null` for all 175 people on staging, also through `GET people/{uuid}` and with `include=primary_organization`. No stack package reads it. **P2.6 decided not to support it:** Employer comes from active connections only (`Api\PersonEmployers`), and "primary organization" can be added as a source once a tenant with the data is found (see [Phase 2 corrections](#phase-2-corrections), item 7).
 
 ### Relationship Types contacts on the org card (P2.5)
 
@@ -601,6 +601,6 @@ What the P2.0 spike changed in [phase-2-tickets.md](phase-2-tickets.md). The tic
 4. **Group Member Status: Inactive** means "has rows in the group but no active row", and needs one extra request for the active people's UUIDs. `group_members_active_eq: false` would list current members who have past terms.
 5. **Roster keyword on the role** works only by matching role labels in PHP first, then ORing the slugs as `group_members_resource_type_slug_in`. Roster sort stays on person keys (a join sort is an HTTP 500).
 6. **Membership owner** is `organization_memberships.relationships.owner`, fetched with the existing tier batch (`include=owner`). An org can have several active memberships with different owners. P2.5 settled which to show: the configured tiers' owners when the directory filters by tiers, else every distinct owner, newest first.
-7. **Primary organization** can't be verified: `primary_organization` is null for every person on staging and nothing in the stack reads it. P2.6 should build Employer from active connections of the selected types and treat "primary organization" as an open question until a tenant with the data is found.
+7. **Primary organization** can't be verified: `primary_organization` is null for every person on staging and nothing in the stack reads it. P2.6 builds Employer from active connections of the selected types and doesn't support "primary organization" until a tenant with the data is found.
 8. **Contact details for owners and contacts** need a second request per page (`people/query` `uuid_in` + `include=emails,phones`), because nested includes don't work on `connections` or `organization_memberships`. That makes P2.5 two or three requests per page; still none per row.
 9. **No group data fields:** no JSON schema on staging is bound to groups, so the group list's facets are group type only. The Group Member card's facets are person data fields, as on individual directories.

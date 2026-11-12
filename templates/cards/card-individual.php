@@ -6,7 +6,8 @@
  * component: its args are post-shaped), so the theme's card styles apply.
  * The photo sits left of the content. The header holds the name and a meta
  * line (member ID | membership tiers); a divider follows it, then the
- * Details, Address and Contact columns. A container query in
+ * Details (job title, then each employer with its relationship type),
+ * Address and Contact columns. A container query in
  * `directory.css` puts the photo and the columns side by side when the card
  * is wide enough.
  *
@@ -53,6 +54,7 @@ $member_id = $entry->member_id !== ''
 
 $has_meta = $member_id !== '' || $entry->tiers !== [];
 $has_contact = $entry->emails !== [] || $entry->phones !== [];
+$has_details = $entry->job_title !== '' || $entry->employers !== [];
 ?>
 <article class="component-card-listing wicket-directory-card wicket-directory-card--individual">
 	<?php if ($entry->image_url !== '') : ?>
@@ -82,12 +84,22 @@ $has_contact = $entry->emails !== [] || $entry->phones !== [];
 			<?php endif; ?>
 		</header>
 
-		<?php if ($entry->job_title !== '' || $entry->addresses !== [] || $has_contact) : ?>
+		<?php if ($has_details || $entry->addresses !== [] || $has_contact) : ?>
 			<div class="wicket-directory-card__columns">
-				<?php if ($entry->job_title !== '') : ?>
+				<?php if ($has_details) : ?>
 					<div class="wicket-directory-card__column wicket-directory-card__details">
 						<h4 class="wicket-directory-card__column-title"><?php esc_html_e('Details', 'wicket-directory'); ?></h4>
-						<p class="wicket-directory-card__job-title"><?php echo esc_html($entry->job_title); ?></p>
+						<?php if ($entry->job_title !== '') : ?>
+							<p class="wicket-directory-card__job-title"><?php echo esc_html($entry->job_title); ?></p>
+						<?php endif; ?>
+						<?php foreach ($entry->employers as $employer) : ?>
+							<p class="wicket-directory-card__employer">
+								<span class="wicket-directory-card__employer-name"><?php echo esc_html($employer['name']); ?></span>
+								<?php if ($employer['relationship'] !== '') : ?>
+									<span class="wicket-directory-card__employer-relationship"><?php echo esc_html($employer['relationship']); ?></span>
+								<?php endif; ?>
+							</p>
+						<?php endforeach; ?>
 					</div>
 				<?php endif; ?>
 

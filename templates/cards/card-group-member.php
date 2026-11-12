@@ -5,7 +5,8 @@
  * The individual card (`card-individual.php`), plus the member's row in the
  * group: the status pill beside the name (whether that row is active, not the
  * person's account status), the role under the name, and the term's start
- * and end dates in the Details column ("Present" for an open-ended term). The
+ * and end dates in the Details column ("Present" for an open-ended term),
+ * after the job title and employers. The
  * same `component-card-listing` and `wicket-directory-card__*` classes apply.
  *
  * The entry holds raw values, and anything the Group Member card config turns
@@ -82,7 +83,7 @@ $end_date = match (true) {
 };
 
 $has_meta = $member_id !== '' || $entry->tiers !== [];
-$has_details = $entry->job_title !== '' || $start_date !== '' || $end_date !== '';
+$has_details = $entry->job_title !== '' || $entry->employers !== [] || $start_date !== '' || $end_date !== '';
 $has_contact = $entry->emails !== [] || $entry->phones !== [];
 ?>
 <article class="component-card-listing wicket-directory-card wicket-directory-card--group-member">
@@ -134,6 +135,14 @@ $has_contact = $entry->emails !== [] || $entry->phones !== [];
 						<?php if ($entry->job_title !== '') : ?>
 							<p class="wicket-directory-card__job-title"><?php echo esc_html($entry->job_title); ?></p>
 						<?php endif; ?>
+						<?php foreach ($entry->employers as $employer) : ?>
+							<p class="wicket-directory-card__employer">
+								<span class="wicket-directory-card__employer-name"><?php echo esc_html($employer['name']); ?></span>
+								<?php if ($employer['relationship'] !== '') : ?>
+									<span class="wicket-directory-card__employer-relationship"><?php echo esc_html($employer['relationship']); ?></span>
+								<?php endif; ?>
+							</p>
+						<?php endforeach; ?>
 						<?php if ($start_date !== '') : ?>
 							<p class="wicket-directory-card__start-date">
 								<span class="wicket-directory-card__date-label"><?php esc_html_e('Start date:', 'wicket-directory'); ?></span>

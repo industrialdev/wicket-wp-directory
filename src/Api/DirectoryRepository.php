@@ -22,14 +22,15 @@ use WP_Post;
  *
  * - Picks the query builder from the directory type and sends the query with
  *   wicket_api_client().
- * - Caches each page (with its tier labels, Organization Contacts or group member counts) in a
- *   transient. The TTL defaults
+ * - Caches each page (with its tier labels, Organization Contacts, employers or group member
+ *   counts) in a transient. The TTL defaults
  *   to CACHE_TTL and can be changed with the wicket_directory/cache_ttl filter.
  * - Never throws and never prints: an API failure is logged and returned as an
  *   empty page flagged `unavailable`. Failures aren't cached.
  *
  * @phpstan-import-type Tier from ResultPage
  * @phpstan-import-type Membership from ResultPage
+ * @phpstan-import-type EmployerSettings from DirectoryConfig
  */
 final class DirectoryRepository
 {
@@ -110,8 +111,9 @@ final class DirectoryRepository
      * a group's member counts; an organization's Organization Contacts
      * (OrganizationContacts: the owners come with the tier request's
      * `include=owner`, then up to one `connections/query` and one
-     * `people/query`). A batch that fails is logged, the page shows without
-     * it and isn't cached.
+     * `people/query`); a person's Employer (PersonEmployers: one
+     * `connections/query`). A batch that fails is logged, the page shows
+     * without it and isn't cached.
      *
      * @param WP_Post         $directory The directory post. Its ID, slug and modified date feed the
      *                                   cache key; its slug feeds the query_args_{slug} filter.
@@ -172,6 +174,13 @@ final class DirectoryRepository
                 }
             }
 
+            $employer = $config->employer();
+
+            if ($employer !== null) {
+                [$page, $loaded] = $this->with_employers($directory, $client, $page, $employer, $lang);
+                $cacheable = $cacheable && $loaded;
+            }
+
             if ($config->type === DirectoryType::Group && ($config->card['member_count'] ?? false) === true) {
                 try {
                     $page = $page->with_member_counts($this->member_counts($client, $page->items));
@@ -195,10 +204,11 @@ final class DirectoryRepository
      * (one `group_members/query`, cached like a page), to leave them out.
      * Pages are cached and fall back to the last page like fetch()'s.
      *
-     * The Group Member card can add two batch requests per page, as fetch()'s
-     * cards do: the people's tiers (when it shows the tier) and their rows in
-     * the group (when it shows the role, status or a date). A batch that fails
-     * is logged, the page shows without it and isn't cached.
+     * The Group Member card can add three batch requests per page, as
+     * fetch()'s cards do: the people's tiers (when it shows the tier), their
+     * rows in the group (when it shows the role, status or a date) and their
+     * employers (when it shows Employer). A batch that fails is logged, the
+     * page shows without it and isn't cached.
      *
      * @param WP_Post               $directory   The directory post.
      * @param DirectoryConfig       $config      The group directory's config.
@@ -260,8 +270,40 @@ final class DirectoryRepository
                 }
             }
 
+            $employer = $config->employer(true);
+
+            if ($employer !== null) {
+                [$page, $loaded] = $this->with_employers($directory, $client, $page, $employer, $lang);
+                $cacheable = $cacheable && $loaded;
+            }
+
             return [$page, $cacheable];
         });
+    }
+
+    /**
+     * Add the page's employers (one `connections/query`, see PersonEmployers).
+     *
+     * @param WP_Post          $directory The directory post, for the log.
+     * @param object           $client    API client.
+     * @param ResultPage       $page      A page of `people` resources.
+     * @param EmployerSettings $settings  The card's Employer settings (DirectoryConfig::employer()).
+     * @param string           $lang      Language code.
+     *
+     * @return array{ResultPage, bool} The page, and false when the lookup failed (logged; the page
+     *                                 shows without employers and mustn't be cached).
+     */
+    private function with_employers(WP_Post $directory, object $client, ResultPage $page, array $settings, string $lang): array
+    {
+        try {
+            $loaded = (new PersonEmployers($client))->load(self::ids($page->items), $settings, $lang);
+
+            return [$page->with_employers($loaded['employers'], $loaded['organizations']), true];
+        } catch (Throwable $e) {
+            $this->log_error($directory, 'Directory employer lookup failed: ' . $e->getMessage());
+
+            return [$page, false];
+        }
     }
 
     /**

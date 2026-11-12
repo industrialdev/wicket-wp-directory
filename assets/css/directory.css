@@ -522,9 +522,20 @@
 	color: var(--wd-text-muted);
 }
 
-/* Group Member card: job title, then the term's start and end dates. */
+/* Person cards: job title, employers, then (Group Member card) the term's start and end dates. */
 .wicket-directory .wicket-directory-card__details > p + p {
 	margin-block-start: var(--wd-space-xs);
+}
+
+/* Employer: the organization's name, then its relationship type on the same line. */
+.wicket-directory-card__employer {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0 var(--wd-space-sm);
+}
+
+.wicket-directory .wicket-directory-card__employer-relationship {
+	color: var(--wd-text-muted);
 }
 
 .wicket-directory .wicket-directory-card__member-count {
