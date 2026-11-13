@@ -542,6 +542,16 @@
 	font-weight: bold;
 }
 
+/* Advance cards: groups of rows outside the header, and one line per template row. */
+.wicket-directory .wicket-directory-card__rows > * {
+	margin-block: 0;
+}
+
+.wicket-directory .wicket-directory-card__rows > * + *,
+.wicket-directory .wicket-directory-card__column > .wicket-directory-card__line + .wicket-directory-card__line {
+	margin-block-start: var(--wd-space-xs);
+}
+
 @container wd-card (min-width: 36rem) {
 	.wicket-directory .wicket-directory-card {
 		flex-direction: row;

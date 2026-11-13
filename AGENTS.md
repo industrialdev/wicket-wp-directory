@@ -4,9 +4,9 @@ Wicket Directory adds configurable public directories of **Individuals** and **O
 
 > **Status: in development (scaffold landed).** The approved plan is `docs/engineering/mvp-plan.md`. Read it before writing code; it is the source of truth for scope, data model and decisions. Classes and paths below are the planned layout unless marked as landed. Update this file as they land.
 
-MVP scope: Individual and Organization directories only. Phase 2 (`docs/engineering/phase-2-tickets.md`) is under way: the Group directory type landed in P2.1 (config, query builder, eligibility, data, admin), its card in P2.2, group member lists (Default View, View Members, Back to Directory) in P2.3, the Group Member card with its own card config and facets in P2.4, Organization Contact on the org card (Membership Owner / Relationship Types) in P2.5, and Employer on the individual and Group Member cards (Designation = the post-nominal field) in P2.6. These are still deferred, so don't build them without being asked:
+MVP scope: Individual and Organization directories only. Phase 2 (`docs/engineering/phase-2-tickets.md`) is under way: the Group directory type landed in P2.1 (config, query builder, eligibility, data, admin), its card in P2.2, group member lists (Default View, View Members, Back to Directory) in P2.3, the Group Member card with its own card config and facets in P2.4, Organization Contact on the org card (Membership Owner / Relationship Types) in P2.5, Employer on the individual and Group Member cards (Designation = the post-nominal field) in P2.6, and the `[col]/{{field}}` merge-tag card template engine (Advance cards: config, render path, field catalog, Standard → template generator) in P2.7. These are still deferred, so don't build them without being asked:
 - the Developer panel UI
-- the `[col]/{{field}}` merge-tag card editor
+- the Advance Configurations editor (P2.8): Standard / Advance switch, the template textarea and field picker, the dirty flag. Until then a card's `mode` and `template` post back in hidden inputs
 
 ## Commands
 
@@ -59,6 +59,10 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
                                  name / title / relationship toggles, email / phone contact rules; org_contact() = the settings when on, else null
                                  Individual (and Group Member) card key `employer` (P2.6; off by default): show, relationship_types (none = any),
                                  relationship (label toggle); employer() = the individual card's settings when on, employer(true) the Group Member card's
+                                 Every card (and member_card) has `mode` standard | advanced and `template` (P2.7; plain text, tags stripped, \n, max
+                                 TEMPLATE_MAX_LENGTH). template(members) = the Advance template, else null. for_render() (the renderer calls it once)
+                                 sets an Advance card's toggles from its tags (FieldCatalog::toggles(); unused off, OPTION_TOGGLES and org_contact
+                                 options only on), so batches and the mapper fill what the template prints; the stored config is never changed
     Admin\DirectoryMetaBoxes     (landed, admin only) one "Directory settings" meta box (render_box → views/settings.php); posts `wicket_directory[...]`;
                                  save_post handler lays the posted SECTIONS (`type`, `eligibility`, `card`, `facets`, `member_card`, `member_facets`,
                                  `roster`) over the stored config
@@ -137,6 +141,8 @@ Block render_callback / ServerSideRender
           uses Data\ContactResolver (landed; static resolve(field, records, rule), the truth table)
           and Data\EnumLabels (landed; enum-key, org-type, group-type, role and relationship-type labels, one load per source per request; shared() keeps the maps in a transient per language)
       → Render\TemplateLoader (landed) templates/directory.php → parts/*, cards/card-{type} (theme overrides at {theme}/wicket-directory/{name}.php)
+          An Advance card (config->template(), template(true) for a member list) uses cards/card-template (DirectoryRenderer::ADVANCE_CARD)
+          instead, through the same card_template filter; `merge_tags` (Template\MergeTags with the renderer's labels) is in the args
           parts/roster-header (landed): Back to Directory link, group type eyebrow, h2 name, description (member lists only)
           parts/search-bar (landed): search-form + location field
           parts/filters (landed): Refine Results checkbox groups (component-filter-form__* classes), Apply Filters, Clear All → clear_url
@@ -154,6 +160,33 @@ Block render_callback / ServerSideRender
             GroupEntry::$members_url is set: the mapper sets it in the Group List + Member List view when card key view_members is on
           assets/css/directory.css (landed) block viewStyle + editorStyle; one --wd-* token layer on .wicket-directory (theme tokens + fallbacks);
             sidebar layout via @container; --standalone modifier (no Wicket theme) styles the panel, cards and pagination itself
+          cards/card-template (landed, P2.7): an Advance card. Template\CardTemplate::parse(template) (cached per request) → render(MergeTags,
+            Template\CardContext::from_page(entry, type, card, page, lang, html_id)) → [media, body], in the same article / content shell
+            and `wicket-directory-card__*` classes as the PHP cards, plus `--template`
+```
+
+### Card templates (P2.7, `src/Template/`)
+
+```
+Template\CardTemplate      syntax: one card row per line; `{{tag}}` merge tags, everything else literal text (escaped); `[col]`…`[/col]` columns
+                           (consecutive ones form one __columns row); `# ` title (h3), `## ` heading (h4). A line whose tags are all empty is left
+                           out; `, ` and ` | ` split segments that drop on their own (no stray commas); a line with a list field repeats per item
+                           of the first one; a tag alone on its line prints its block form; a column with tags but nothing shown is left out.
+                           Lines outside columns form groups: the one with the title is the __header, others __rows; the image, description,
+                           website buttons and tag chips stand alone; an {{image}} before anything else goes beside the content (media).
+                           tags(template) = the distinct tags, for FieldCatalog::toggles()
+Template\MergeTags         resolve(tag, CardContext) → TagValue (items = escaped inline HTML, is_list, block, standalone). Chain, first match wins:
+                           1 computed (image, email, phone, address, website_button, employer, tag_chips, description, group_*, view_members_button,
+                           group_member_*, org_contact / org_contact[n].name|title|relationship|email|phone; may print markup and components)
+                           2 typed contact tags addresses|emails|phones|websites[primary|consent|type=…,consent=…,primaryOnly=…].attribute
+                           (raw records from the page's included, through ContactResolver; no card toggle needed)
+                           3 catalog: entry properties (after the entry filters), data_fields.{schema}.{field} (enum labels), extra.{key}
+                           4 FieldCatalog::ALIASES (first_name, legal_name, title, designation…) 5 '' (never an error or a raw tag)
+Template\FieldCatalog      fields(type, members, data_fields) / grouped(): tag => label, group (Profile, Group, Addresses, Email, Phone, Website,
+                           Membership, Connections, Data Fields), toggles. Backs the P2.8 picker. toggles(tags) / all_toggles() for for_render()
+Template\TemplateGenerator generate(type, card, members): the template a Standard card stands for, in the PHP card's order; only fields its
+                           toggles turn on, so for_render() of it gives back the same toggles (P2.8 prefills Advance with it)
+Template\CardContext / TagValue  value objects
 ```
 
 There is **one render path**. The frontend and the block editor preview both go through `DirectoryRenderer`. Don't add a second one.
@@ -194,9 +227,9 @@ There is **one render path**. The frontend and the block editor preview both go 
 | Hook | Purpose |
 |---|---|
 | `wicket_directory/query_args`, `wicket_directory/query_args_{slug}` (filter) | (landed) Modify the API query before it runs. Gets `$args` (`filter`, `page`, `sort`, `include`), `DirectoryConfig`, `RequestParams`. `{slug}` is the directory post's slug. A group member list's query is a `people/query`: tell it by `$params->is_roster()` |
-| `wicket_directory/entry`, `wicket_directory/entry_{slug}` (filter) | (landed) Modify one entry's data before its card renders. Gets the entry's `to_array()`, the raw API resource and `DirectoryConfig`; returns the array. Unknown keys are dropped and wrong-typed values keep the original; custom data goes under `extra`. A person's (and a member list's) entries have `employers` (list of `{id, name, relationship}`); a member list's also have `role`, `role_label`, `status`, `start_date`, `end_date`; an organization's have `contacts` (list of `{id, name, title, relationship, emails, phones}`) |
+| `wicket_directory/entry`, `wicket_directory/entry_{slug}` (filter) | (landed) Modify one entry's data before its card renders. Gets the entry's `to_array()`, the raw API resource and `DirectoryConfig`; returns the array. Unknown keys are dropped and wrong-typed values keep the original; custom data goes under `extra`. A person's (and a member list's) entries have `employers` (list of `{id, name, relationship}`); a member list's also have `role`, `role_label`, `status`, `start_date`, `end_date`; an organization's have `contacts` (list of `{id, name, title, relationship, emails, phones}`). An Advance card's tags read the filtered entry, and `{{extra.key}}` prints a scalar (or list of scalars) a filter put under `extra` |
 | `wicket_directory/before_render`, `wicket_directory/before_render_{slug}` (action) | (landed) Runs before the listing's API query and render. Gets `DirectoryConfig`, `RequestParams`, the directory `WP_Post`. Output it prints comes before the directory. Not fired for a missing or unpublished directory. For a group member list it gets the member list's params and runs after the group lookup |
-| `wicket_directory/card_template` (filter) | (landed) Swap the card template file, once per render. Gets the located absolute path (`''` when none), `DirectoryConfig`, the directory `WP_Post`. A return that isn't an existing file keeps the located one |
+| `wicket_directory/card_template` (filter) | (landed) Swap the card template file, once per render. Gets the located absolute path (`''` when none), `DirectoryConfig` (as for_render() gives it), the directory `WP_Post`. A return that isn't an existing file keeps the located one. An Advance card's located file is `cards/card-template.php` |
 | `wicket_directory/cache_ttl` (filter) | (landed) API response cache lifetime in seconds (default 600). Gets `$ttl`, `DirectoryConfig`, the directory `WP_Post`. `0` disables the cache |
 | `wicket_directory/labels_cache_ttl` (filter) | (landed) Lifetime of the per-language enum and org-type label transient that facets and cards share (default 3600). Gets `$ttl`, `$lang`. `0` disables it |
 

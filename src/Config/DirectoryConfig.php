@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Wicket\Directory\Config;
 
 use Wicket\Directory\PostType\DirectoryPostType;
+use Wicket\Directory\Template\CardTemplate;
+use Wicket\Directory\Template\FieldCatalog;
 use WP_Post;
 
 /**
@@ -155,6 +157,28 @@ final class DirectoryConfig
      * records. They go through ContactResolver, like the card's.
      */
     public const ORG_CONTACT_RECORDS = ['email', 'phone'];
+
+    /**
+     * Card mode: the card's toggles lay it out, through the PHP card
+     * template (the default).
+     */
+    public const MODE_STANDARD = 'standard';
+
+    /**
+     * Card mode: the card's `[col]` / `{{field}}` template lays it out
+     * (Template\CardTemplate). Only with a non-empty template.
+     */
+    public const MODE_ADVANCED = 'advanced';
+
+    /**
+     * Allowed values of a card's `mode`.
+     */
+    public const MODES = [self::MODE_STANDARD, self::MODE_ADVANCED];
+
+    /**
+     * Longest card template kept, in characters.
+     */
+    public const TEMPLATE_MAX_LENGTH = 20000;
 
     /**
      * Use defaults(), from_post() or sanitize().
@@ -375,6 +399,152 @@ final class DirectoryConfig
     }
 
     /**
+     * A card's Advance template, when the card is laid out by one.
+     *
+     * @param bool $members The Group Member card (group directories) instead of the main card.
+     *
+     * @return string|null The template; null when the card is Standard or has no template.
+     */
+    public function template(bool $members = false): ?string
+    {
+        $card = $members ? ($this->type === DirectoryType::Group ? $this->member_card : []) : $this->card;
+
+        return self::advanced_template($card);
+    }
+
+    /**
+     * The config the render path uses.
+     *
+     * A Standard card is as saved. An Advance card's template decides what
+     * shows, so its toggles follow the tags it uses
+     * (Template\FieldCatalog::toggles()): a used field's toggle is on, an
+     * unused one off. The batches (tiers, owners, employers, member counts,
+     * the group rows) and EntryMapper then fill exactly what the template
+     * prints. Settings that aren't toggles (contact rule types and flags,
+     * data-field references, the address format, the website label, Employer
+     * and Organization Contact options) keep their saved values. Options of
+     * another field (the name parts of `{{name}}`, the Organization Contact
+     * options of `{{org_contact}}`; FieldCatalog::OPTION_TOGGLES) are turned
+     * on when a tag needs them (`{{salutation}}`, `{{org_contact[1].email}}`)
+     * but never off.
+     *
+     * The stored config is never changed: switching back to Standard finds
+     * the toggles as they were.
+     *
+     * @return self
+     */
+    public function for_render(): self
+    {
+        $card = self::render_card($this->card, $this->type, false);
+        $member_card = $this->type === DirectoryType::Group ? self::render_card($this->member_card, $this->type, true) : $this->member_card;
+
+        if ($card === $this->card && $member_card === $this->member_card) {
+            return $this;
+        }
+
+        return new self($this->type, $this->eligibility, $card, $this->facets, $this->cache_version, $this->roster, $member_card, $this->member_facets);
+    }
+
+    /**
+     * A card's toggles for rendering; see for_render().
+     *
+     * @param array<string, mixed> $card    The card's settings.
+     * @param DirectoryType        $type    Directory type.
+     * @param bool                 $members The Group Member card.
+     *
+     * @return array<string, mixed>
+     */
+    private static function render_card(array $card, DirectoryType $type, bool $members): array
+    {
+        $template = self::advanced_template($card);
+
+        if ($template === null) {
+            return $card;
+        }
+
+        $used = FieldCatalog::toggles(CardTemplate::tags($template), $type, $members);
+
+        foreach (FieldCatalog::all_toggles($type, $members) as $path) {
+            $card = self::set_path($card, $path, in_array($path, $used, true));
+        }
+
+        foreach ($used as $path) {
+            $card = self::set_path($card, $path, true);
+        }
+
+        return $card;
+    }
+
+    /**
+     * Set a boolean card setting by path.
+     *
+     * @param array<string, mixed> $card  The card's settings.
+     * @param string               $path `job_title`, `email.show` or `org_contact.email.show`.
+     * @param bool                 $value Value.
+     *
+     * @return array<string, mixed>
+     */
+    private static function set_path(array $card, string $path, bool $value): array
+    {
+        $keys = explode('.', $path);
+        $key = array_shift($keys);
+
+        if (!array_key_exists($key, $card)) {
+            return $card;
+        }
+
+        if ($keys === []) {
+            if (is_bool($card[$key])) {
+                $card[$key] = $value;
+            }
+
+            return $card;
+        }
+
+        if (is_array($card[$key])) {
+            $card[$key] = self::set_path($card[$key], implode('.', $keys), $value);
+        }
+
+        return $card;
+    }
+
+    /**
+     * A card's template, when its mode is Advance and the template isn't empty.
+     *
+     * @param array<string, mixed> $card The card's settings.
+     *
+     * @return string|null
+     */
+    private static function advanced_template(array $card): ?string
+    {
+        $template = $card['template'] ?? '';
+
+        return ($card['mode'] ?? null) === self::MODE_ADVANCED && is_string($template) && trim($template) !== '' ? $template : null;
+    }
+
+    /**
+     * Sanitize a card template.
+     *
+     * Plain text: tags are stripped (the template escapes its literal text
+     * anyway), line breaks kept and normalized to `\n`, and the length capped
+     * at TEMPLATE_MAX_LENGTH.
+     *
+     * @param mixed $value Raw template.
+     *
+     * @return string
+     */
+    private static function sanitize_template(mixed $value): string
+    {
+        if (!is_string($value)) {
+            return '';
+        }
+
+        $value = sanitize_textarea_field(str_replace(["\r\n", "\r"], "\n", $value));
+
+        return mb_substr($value, 0, self::TEMPLATE_MAX_LENGTH);
+    }
+
+    /**
      * Default eligibility: active members (or, for groups, active groups) only,
      * no other conditions.
      *
@@ -452,12 +622,20 @@ final class DirectoryConfig
      * have no contact records, member ID, tiers or data fields, so their card
      * has only its own toggles.
      *
+     * Every card has a `mode` (Standard, the default) and a `template` (the
+     * Advance layout; empty until one is written).
+     *
      * @param DirectoryType $type Directory type.
      *
      * @return array<string, mixed>
      */
     private static function card_defaults(DirectoryType $type): array
     {
+        $layout = [
+            'mode'     => self::MODE_STANDARD,
+            'template' => '',
+        ];
+
         $shared = [
             'member_id'       => false,
             'membership_tier' => false,
@@ -465,7 +643,7 @@ final class DirectoryConfig
             'website_label'   => '',
             'eyebrow'         => self::empty_ref(),
             'tag_chips'       => [],
-        ];
+        ] + $layout;
 
         return match ($type) {
             DirectoryType::Individual => [
@@ -497,7 +675,7 @@ final class DirectoryConfig
                 'description'  => true,
                 'member_count' => true,
                 'view_members' => true,
-            ],
+            ] + $layout,
         };
     }
 
@@ -746,6 +924,8 @@ final class DirectoryConfig
                 $key === 'tag_chips'                       => self::data_field_list($value),
                 $key === 'org_contact'                     => self::sanitize_org_contact($value, $default),
                 $key === 'employer'                        => self::sanitize_employer($value, $default),
+                $key === 'mode'                            => in_array($value, self::MODES, true) ? $value : $default,
+                $key === 'template'                        => self::sanitize_template($value),
                 is_bool($default)                          => self::bool($value, $default),
                 // The remaining keys are single data-field references.
                 default                                    => self::sanitize_data_field_ref($value),

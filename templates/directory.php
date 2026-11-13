@@ -35,6 +35,7 @@
  *     wicket_theme: bool,
  *     lang: string,
  *     templates: Wicket\Directory\Render\TemplateLoader,
+ *     merge_tags: Wicket\Directory\Template\MergeTags,
  * } $args
  */
 

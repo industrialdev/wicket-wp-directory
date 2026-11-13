@@ -26,7 +26,9 @@
  *
  * The save handler replaces the whole card section with what this tab posts,
  * so every card key has a control here. Boolean checkboxes post a hidden "0"
- * first; data-field pickers post `"schema_key.field"` (`''` for none).
+ * first; data-field pickers post `"schema_key.field"` (`''` for none). The
+ * card's `mode` and Advance `template` post back as saved, in hidden inputs,
+ * until the Advance editor (P2.8) gives them controls.
  *
  * A group directory prints it twice: for `card`, and for its Group Member
  * card (`section` `member_card`, with its own `id_prefix`, `label` and
@@ -113,6 +115,9 @@ $hint_state = static fn (array $rule): string => match (true) {
 <div class="wicket-directory-card-settings">
     <p class="wd-help" data-wd-type-changed hidden><?php esc_html_e('Save the directory to set up the card for the new type.', 'wicket-directory'); ?></p>
     <div data-wd-type-unchanged>
+        <?php // The Advance layout has no editor yet (P2.8): post it back as saved, so a save keeps it.?>
+        <input type="hidden" name="<?php echo esc_attr($name . '[mode]'); ?>" value="<?php echo esc_attr((string) ($card['mode'] ?? '')); ?>">
+        <input type="hidden" name="<?php echo esc_attr($name . '[template]'); ?>" value="<?php echo esc_attr((string) ($card['template'] ?? '')); ?>">
         <?php if ($args['schemas_failed']) : ?>
             <div class="notice notice-error inline">
                 <p><?php esc_html_e('Data fields couldn\'t be loaded from Wicket. Saved data fields are kept.', 'wicket-directory'); ?></p>

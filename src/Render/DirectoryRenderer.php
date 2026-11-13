@@ -17,6 +17,7 @@ use Wicket\Directory\Data\FacetOptions;
 use Wicket\Directory\PostType\DirectoryPostType;
 use Wicket\Directory\Query\QueryBuilder;
 use Wicket\Directory\Query\RequestParams;
+use Wicket\Directory\Template\MergeTags;
 use WP_Post;
 
 /**
@@ -42,6 +43,12 @@ final class DirectoryRenderer
      * Log source, as DirectoryRepository uses.
      */
     public const LOG_SOURCE = 'wicket-directory';
+
+    /**
+     * The card template of a card laid out by an Advance template
+     * (DirectoryConfig::template()): it renders the template for each entry.
+     */
+    public const ADVANCE_CARD = 'cards/card-template';
 
     /**
      * Runs one page query.
@@ -71,7 +78,7 @@ final class DirectoryRenderer
     private Closure $is_preview;
 
     /**
-     * Role labels, for a member list's keyword.
+     * Role labels, for a member list's keyword, and data-field labels for Advance cards.
      */
     private EnumLabels $labels;
 
@@ -82,7 +89,8 @@ final class DirectoryRenderer
      * @param TemplateLoader|null      $templates  Defaults to the plugin's templates.
      * @param (callable(): bool)|null  $is_preview Whether the render is the editor preview.
      *                                             Defaults to is_editor_preview(). Tests pass one.
-     * @param EnumLabels|null          $labels     Role labels for member lists. Defaults to the shared labels.
+     * @param EnumLabels|null          $labels     Role labels for member lists, and data-field labels for
+     *                                             Advance cards' tags. Defaults to the shared labels.
      */
     public function __construct(
         ?DirectoryRepository $repository = null,
@@ -130,7 +138,8 @@ final class DirectoryRenderer
             return $this->notice(__('This directory isn’t published, so visitors don’t see it. Publish it to show it on this page.', 'wicket-directory'));
         }
 
-        $config = DirectoryConfig::from_post($directory);
+        // An Advance card's toggles follow its template (for_render()), for the batches and the mapper.
+        $config = DirectoryConfig::from_post($directory)?->for_render();
 
         if ($config === null) {
             return '';
@@ -246,7 +255,7 @@ final class DirectoryRenderer
             'facets'          => $config->facets,
             'collapse_refine' => $attributes->collapse_refine_on_mobile,
             'roster'          => null,
-            'card_template'   => $this->card_template($directory, $config, 'cards/card-' . $config->type->value),
+            'card_template'   => $this->card_template($directory, $config, $config->template() !== null ? self::ADVANCE_CARD : 'cards/card-' . $config->type->value),
         ], $lang);
     }
 
@@ -314,7 +323,7 @@ final class DirectoryRenderer
                 'group'    => $this->mapper->roster_group($group, $lang),
                 'back_url' => $back_url,
             ],
-            'card_template'   => $this->card_template($directory, $config, 'cards/card-group-member'),
+            'card_template'   => $this->card_template($directory, $config, $config->template(true) !== null ? self::ADVANCE_CARD : 'cards/card-group-member'),
         ], $lang);
     }
 
@@ -383,6 +392,8 @@ final class DirectoryRenderer
             'wicket_theme'  => function_exists('is_wicket_theme_active') && is_wicket_theme_active(),
             'lang'          => $lang,
             'templates'     => $this->templates,
+            // An Advance card's tag resolver (cards/card-template.php), one per list.
+            'merge_tags'    => new MergeTags($this->labels),
         ]);
     }
 
@@ -390,7 +401,8 @@ final class DirectoryRenderer
      * The card template file for a directory.
      *
      * `$name` (`cards/card-{type}`, or `cards/card-group-member` for a
-     * member list), as located by TemplateLoader, then the
+     * member list; ADVANCE_CARD for a card with an Advance template), as
+     * located by TemplateLoader, then the
      * `wicket_directory/card_template` filter. A filter result that isn't an
      * existing file keeps the located one.
      *
