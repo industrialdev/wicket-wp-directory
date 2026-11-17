@@ -328,6 +328,172 @@
 } )();
 
 /**
+ * Card View layout: Standard (the checklist) or Advance (the card template).
+ *
+ * Each card's settings (`[data-wd-layout]`; a group directory has two) show
+ * the panel of their checked `data-wd-layout-mode` radio. The dirty flag
+ * (`[data-wd-dirty]`, disabled until now so it posts only with the script)
+ * says whether the admin changed the template:
+ *
+ * - typing in the template or inserting a field sets it;
+ * - Standard → Advance fills the template with the one the checklist stands
+ *   for (`data-wd-generated`, as last saved) unless it's dirty and not empty;
+ *   a note says so when the checklist has changed since the page loaded;
+ * - Advance → Standard clears the template and the flag, after a confirm
+ *   (`data-wd-confirm`) when it's dirty; cancelling stays in Advance.
+ *
+ * The "Select a Field…" picker and the custom field path insert `{{tag}}` at
+ * the cursor. Neither posts.
+ */
+( function () {
+	document.querySelectorAll( '[data-wd-layout]' ).forEach( ( root ) => {
+		const radios = Array.from(
+			root.querySelectorAll( '[data-wd-layout-mode]' )
+		);
+		const editor = root.querySelector(
+			'[data-wd-layout-panel="advanced"]'
+		);
+
+		if ( ! radios.length || ! editor ) {
+			return;
+		}
+
+		const panels = root.querySelectorAll( '[data-wd-layout-panel]' );
+		const standard = root.querySelector(
+			'[data-wd-layout-panel="standard"]'
+		);
+		const template = editor.querySelector( '[data-wd-template]' );
+		const dirtyInput = editor.querySelector( '[data-wd-dirty]' );
+		const stale = editor.querySelector( '[data-wd-stale]' );
+		const tools = editor.querySelector( '[data-wd-editor-tools]' );
+		const picker = editor.querySelector( '[data-wd-field-picker]' );
+		const customToggle = editor.querySelector( '[data-wd-custom-toggle]' );
+		const custom = editor.querySelector( '[data-wd-custom]' );
+		const customPath = editor.querySelector( '[data-wd-custom-path]' );
+		const customInsert = editor.querySelector( '[data-wd-custom-insert]' );
+		let dirty = dirtyInput.value === '1';
+		let standardChanged = false;
+		let mode = radios.find( ( radio ) => radio.checked )?.value;
+
+		const setDirty = ( value ) => {
+			dirty = value;
+			dirtyInput.value = value ? '1' : '0';
+		};
+
+		const show = () => {
+			panels.forEach( ( panel ) => {
+				panel.hidden = panel.dataset.wdLayoutPanel !== mode;
+			} );
+		};
+
+		const select = ( value ) => {
+			radios.forEach( ( radio ) => {
+				radio.checked = radio.value === value;
+			} );
+		};
+
+		const insert = ( tag ) => {
+			const token = `{{${ tag }}}`;
+
+			template.focus();
+			template.setRangeText(
+				token,
+				template.selectionStart,
+				template.selectionEnd,
+				'end'
+			);
+			setDirty( true );
+		};
+
+		radios.forEach( ( radio ) =>
+			radio.addEventListener( 'change', () => {
+				if ( ! radio.checked || radio.value === mode ) {
+					return;
+				}
+
+				const empty = template.value.trim() === '';
+
+				if ( radio.value === 'advanced' ) {
+					if ( ! dirty || empty ) {
+						template.value = editor.dataset.wdGenerated || '';
+						setDirty( false );
+						stale.hidden = ! standardChanged;
+					}
+				} else {
+					if (
+						dirty &&
+						! empty &&
+						// eslint-disable-next-line no-alert
+						! window.confirm( editor.dataset.wdConfirm )
+					) {
+						select( mode );
+						return;
+					}
+
+					template.value = '';
+					setDirty( false );
+					stale.hidden = true;
+				}
+
+				mode = radio.value;
+				show();
+			} )
+		);
+
+		standard?.addEventListener( 'change', () => {
+			standardChanged = true;
+		} );
+
+		template.addEventListener( 'input', () => setDirty( true ) );
+
+		picker.addEventListener( 'change', () => {
+			if ( picker.value !== '' ) {
+				insert( picker.value );
+				picker.value = '';
+			}
+		} );
+
+		customToggle.addEventListener( 'click', () => {
+			custom.hidden = ! custom.hidden;
+			customToggle.setAttribute(
+				'aria-expanded',
+				custom.hidden ? 'false' : 'true'
+			);
+
+			if ( ! custom.hidden ) {
+				customPath.focus();
+			}
+		} );
+
+		const insertCustom = () => {
+			const tag = customPath.value.replace( /[{}\s]/g, '' );
+
+			if ( tag === '' ) {
+				customPath.focus();
+				return;
+			}
+
+			insert( tag );
+			customPath.value = '';
+		};
+
+		customInsert.addEventListener( 'click', insertCustom );
+
+		// Enter inserts the path instead of saving the post.
+		customPath.addEventListener( 'keydown', ( event ) => {
+			if ( event.key === 'Enter' ) {
+				event.preventDefault();
+				insertCustom();
+			}
+		} );
+
+		dirtyInput.disabled = false;
+		tools.hidden = false;
+		show();
+	} );
+} )();
+
+/**
  * Filters tab: add, move and remove facet rows.
  *
  * Rows post `{name}[i][source|schema_key|field|label]`; after every change the

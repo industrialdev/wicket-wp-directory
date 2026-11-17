@@ -7,6 +7,7 @@ namespace Wicket\Directory\Config;
 use Wicket\Directory\PostType\DirectoryPostType;
 use Wicket\Directory\Template\CardTemplate;
 use Wicket\Directory\Template\FieldCatalog;
+use Wicket\Directory\Template\TemplateGenerator;
 use WP_Post;
 
 /**
@@ -181,6 +182,13 @@ final class DirectoryConfig
     public const TEMPLATE_MAX_LENGTH = 20000;
 
     /**
+     * Card keys of the layout, not of what the card shows: the mode, the
+     * Advance template and its dirty flag. The Card View's Standard / Advance
+     * editor sets them, not the checklist.
+     */
+    public const LAYOUT_KEYS = ['mode', 'template', 'template_dirty'];
+
+    /**
      * Use defaults(), from_post() or sanitize().
      *
      * @param DirectoryType        $type          What the directory lists.
@@ -288,12 +296,12 @@ final class DirectoryConfig
             $card = self::card_defaults($type);
             $facets = [];
         } else {
-            $card = self::sanitize_card(is_array($input['card'] ?? null) ? $input['card'] : [], self::card_defaults($type));
+            $card = self::sanitize_layout(self::sanitize_card(is_array($input['card'] ?? null) ? $input['card'] : [], self::card_defaults($type)), $type, false);
             $facets = self::sanitize_facets($input['facets'] ?? null, $type);
 
             // Members are people: their card is the individual one plus the group fields, their facets a person's.
             if ($type === DirectoryType::Group) {
-                $member_card = self::sanitize_card(is_array($input['member_card'] ?? null) ? $input['member_card'] : [], $member_card);
+                $member_card = self::sanitize_layout(self::sanitize_card(is_array($input['member_card'] ?? null) ? $input['member_card'] : [], $member_card), $type, true);
                 $member_facets = self::sanitize_facets($input['member_facets'] ?? null, DirectoryType::Individual);
             }
         }
@@ -523,6 +531,44 @@ final class DirectoryConfig
     }
 
     /**
+     * Apply the dirty-flag rules to a sanitized card.
+     *
+     * `template_dirty` says whether the admin wrote or edited the Advance
+     * template, as opposed to the template the Standard toggles stand for
+     * (TemplateGenerator). The Card View's script sets it when the admin types
+     * in the template or inserts a field, and asks before Advance → Standard
+     * drops a dirty template. The rules:
+     *
+     * - An empty template is never dirty: there is nothing to lose.
+     * - A template posted or stored without the flag (or with an invalid
+     *   one) counts as dirty when it isn't empty. That covers configs saved
+     *   before the flag existed and the editor without its script (which
+     *   posts no flag), so a template someone wrote is never replaced.
+     * - An Advance template that isn't dirty is the generated one: it is
+     *   written again from the card's toggles, so it follows them (and the
+     *   current language's labels).
+     *
+     * A Standard card keeps its template as posted: the script clears it when
+     * the admin leaves Advance.
+     *
+     * @param array<string, mixed> $card    The sanitized card.
+     * @param DirectoryType        $type    Directory type.
+     * @param bool                 $members The Group Member card.
+     *
+     * @return array<string, mixed>
+     */
+    private static function sanitize_layout(array $card, DirectoryType $type, bool $members): array
+    {
+        if (trim($card['template']) === '') {
+            $card['template_dirty'] = false;
+        } elseif (!$card['template_dirty'] && $card['mode'] === self::MODE_ADVANCED) {
+            $card['template'] = self::sanitize_template(TemplateGenerator::generate($type, $card, $members));
+        }
+
+        return $card;
+    }
+
+    /**
      * Sanitize a card template.
      *
      * Plain text: tags are stripped (the template escapes its literal text
@@ -622,8 +668,9 @@ final class DirectoryConfig
      * have no contact records, member ID, tiers or data fields, so their card
      * has only its own toggles.
      *
-     * Every card has a `mode` (Standard, the default) and a `template` (the
-     * Advance layout; empty until one is written).
+     * Every card has a `mode` (Standard, the default), a `template` (the
+     * Advance layout; empty until one is written) and `template_dirty`
+     * (whether the admin edited that template; see sanitize_layout()).
      *
      * @param DirectoryType $type Directory type.
      *
@@ -632,8 +679,9 @@ final class DirectoryConfig
     private static function card_defaults(DirectoryType $type): array
     {
         $layout = [
-            'mode'     => self::MODE_STANDARD,
-            'template' => '',
+            'mode'           => self::MODE_STANDARD,
+            'template'       => '',
+            'template_dirty' => false,
         ];
 
         $shared = [
@@ -926,6 +974,8 @@ final class DirectoryConfig
                 $key === 'employer'                        => self::sanitize_employer($value, $default),
                 $key === 'mode'                            => in_array($value, self::MODES, true) ? $value : $default,
                 $key === 'template'                        => self::sanitize_template($value),
+                // Missing or invalid counts as dirty; sanitize_layout() clears it for an empty template.
+                $key === 'template_dirty'                  => self::bool($value, true),
                 is_bool($default)                          => self::bool($value, $default),
                 // The remaining keys are single data-field references.
                 default                                    => self::sanitize_data_field_ref($value),

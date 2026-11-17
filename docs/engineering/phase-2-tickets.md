@@ -1,7 +1,7 @@
 ---
 title: "Phase 2 Tickets"
 audience: [developer, agent]
-updated: 2026-11-13
+updated: 2026-11-17
 ---
 
 # `wicket-wp-directory` Phase 2 tickets
@@ -26,7 +26,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | P2.5 | [Organization Contact on the org card (Membership Owner / Relationship Types)](#p25) | P2.0 | Done |
 | P2.6 | [Individual card: Employer, Designation and relationship types](#p26) | P2.0 | Done |
 | P2.7 | [Merge-tag card template engine (`[col]` / `{{field}}`)](#p27) | P2.4, P2.5, P2.6 | Done |
-| P2.8 | [Admin Advance Configurations editor](#p28) | P2.7 | To do |
+| P2.8 | [Admin Advance Configurations editor](#p28) | P2.7 | Done |
 | P2.9 | [Developer tab: custom code switch, notes, hook reference and custom fields](#p29) | — | To do |
 | P2.10 | [Admin live card preview](#p210) | P2.7 | To do |
 | P2.11 | [Phase 2 acceptance: theme check, docs and Atlas](#p211) | P2.1–P2.10 | To do |
@@ -304,6 +304,32 @@ Card View gets Standard / Advance modes.
 - Standard-only directories save as before.
 - The editor posts without the script (textarea fallback).
 - Unit tests for sanitizing and the dirty-flag rules.
+
+**Outcome (2026-11-17):**
+
+- **Config.** Every card (and `member_card`) gains `template_dirty`. `DirectoryConfig::LAYOUT_KEYS` lists the three layout keys (`mode`, `template`, `template_dirty`), which the editor sets and the checklist doesn't. Dirty-flag rules, applied in `sanitize()`:
+  - An empty template is never dirty.
+  - A flag that is missing or invalid counts as dirty when the template isn't empty. That covers configs saved before P2.8 and the editor without its script, which posts no flag. A template someone wrote is never replaced.
+  - **An Advance template that isn't dirty is the generated one.** `sanitize()` writes it again from the card's toggles (`TemplateGenerator`), on save and on read. So it follows the Standard checklist and the current language's labels until the admin edits it. An empty Advance template stays empty and renders the Standard card, as in P2.7.
+  - A Standard card keeps its template as posted. A type change resets all three keys with the card.
+- **Card View.** A Layout switch (Standard / Advance, the `mode` radios) sits above each card's checklist; a group directory has one per card. Both panels always post, so the checklist keeps its settings while the card is in Advance (the generator reads them).
+- **The Advance panel:**
+  - the template in a textarea (`[template]`);
+  - a "Select a Field…" picker: `FieldCatalog::grouped()`, plus the card's schema data fields as `data_fields.{schema}.{field}`, labelled "Schema › Field";
+  - "Use Custom Field Path": a text field that inserts any tag, braces and spaces stripped;
+  - a syntax help line;
+  - the generated template for the saved toggles (`data-wd-generated`).
+
+  The picker and the path field don't post. The `[template_dirty]` hidden input is disabled until the script enables it.
+- **Script** (`assets/js/admin.js`):
+  - Typing in the template or inserting a field sets the flag.
+  - Standard → Advance fills the template with the generated one, unless it's dirty and not empty. If the checklist changed since the page loaded, a note says the saved toggles were used and saving applies the changes.
+  - Advance → Standard clears the template and the flag. When the template is dirty it first asks with `confirm()`; Cancel stays in Advance. There is no warning otherwise.
+- **Without the script** both panels show and the textarea posts. No flag posts, so the template counts as edited and is kept.
+- **Checked:**
+  - Unit tests in `qa`: `CardEditorTest` (dirty-flag rules, editor markup, saves, the no-script post). The card-key tests and form-post helpers are updated for `template_dirty` and textareas.
+  - The script ran in a browser against the real markup on a static page: switch, prefill, stale note, picker, custom path, confirm with Cancel and OK, and a group directory's two editors.
+  - Not checked in WP admin on the local stack. QA has no JS unit tests, so the script's rules have no automated test.
 
 ## 4. Admin
 

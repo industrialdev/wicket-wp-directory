@@ -26,9 +26,19 @@
  *
  * The save handler replaces the whole card section with what this tab posts,
  * so every card key has a control here. Boolean checkboxes post a hidden "0"
- * first; data-field pickers post `"schema_key.field"` (`''` for none). The
- * card's `mode` and Advance `template` post back as saved, in hidden inputs,
- * until the Advance editor (P2.8) gives them controls.
+ * first; data-field pickers post `"schema_key.field"` (`''` for none).
+ *
+ * Above the checklist, the card's layout (`mode`): Standard (the checklist)
+ * or Advance (the `[col]` / `{{field}}` template, in a textarea). Both panels
+ * (`data-wd-layout-panel`) always post, so the checklist keeps its settings
+ * while the card is in Advance. The script shows the chosen panel, fills an
+ * empty or untouched template with the one the checklist stands for
+ * (`data-wd-generated`) on Standard → Advance, inserts fields from the
+ * "Select a Field…" picker and the custom field path (neither posts), and
+ * keeps the dirty flag (`template_dirty`). That input is disabled until the
+ * script enables it: without the script no flag posts, so the template counts
+ * as edited and is kept (DirectoryConfig::sanitize()). Advance → Standard
+ * clears the template, after a confirm when it is dirty.
  *
  * A group directory prints it twice: for `card`, and for its Group Member
  * card (`section` `member_card`, with its own `id_prefix`, `label` and
@@ -53,6 +63,8 @@
  *     address_formats: array<string, string>,
  *     org_contact: array{sources: array<string, string>, types: array<string, string>, hints: array<string, string>, toggles: array<string, string>, records: array<string, array{label: string, noun: string, types: array<string, string>}>}|null,
  *     employer?: array{types: array<string, string>, hint: string}|null,
+ *     fields: array<string, array{label: string, fields: array<string, string>}>,
+ *     generated: string,
  * } $args
  */
 
@@ -63,6 +75,12 @@ defined('ABSPATH') || exit;
 $card = $args['card'] ?? $args['config']->card;
 $name = $args['field'] . '[' . ($args['section'] ?? 'card') . ']';
 $id_prefix = $args['id_prefix'] ?? 'wicket-directory-card-';
+$standard = Wicket\Directory\Config\DirectoryConfig::MODE_STANDARD;
+$advanced = Wicket\Directory\Config\DirectoryConfig::MODE_ADVANCED;
+$modes = [
+    $standard => __('Standard', 'wicket-directory'),
+    $advanced => __('Advance', 'wicket-directory'),
+];
 
 $chip_picker = static function (array $args): void {
     include __DIR__ . '/chip-picker.php';
@@ -112,12 +130,9 @@ $hint_state = static fn (array $rule): string => match (true) {
     default                                          => 'none',
 };
 ?>
-<div class="wicket-directory-card-settings">
+<div class="wicket-directory-card-settings" data-wd-layout>
     <p class="wd-help" data-wd-type-changed hidden><?php esc_html_e('Save the directory to set up the card for the new type.', 'wicket-directory'); ?></p>
     <div data-wd-type-unchanged>
-        <?php // The Advance layout has no editor yet (P2.8): post it back as saved, so a save keeps it.?>
-        <input type="hidden" name="<?php echo esc_attr($name . '[mode]'); ?>" value="<?php echo esc_attr((string) ($card['mode'] ?? '')); ?>">
-        <input type="hidden" name="<?php echo esc_attr($name . '[template]'); ?>" value="<?php echo esc_attr((string) ($card['template'] ?? '')); ?>">
         <?php if ($args['schemas_failed']) : ?>
             <div class="notice notice-error inline">
                 <p><?php esc_html_e('Data fields couldn\'t be loaded from Wicket. Saved data fields are kept.', 'wicket-directory'); ?></p>
@@ -130,6 +145,18 @@ $hint_state = static fn (array $rule): string => match (true) {
         <?php endif; ?>
         <p class="wd-panel__label"><?php echo esc_html($args['label'] ?? __('Card details', 'wicket-directory')); ?></p>
         <p class="wd-help wd-help--intro"><?php echo esc_html($args['intro'] ?? __('Choose what each card shows.', 'wicket-directory')); ?></p>
+        <fieldset class="wd-layout-switch">
+            <legend class="wd-sublabel"><?php esc_html_e('Layout', 'wicket-directory'); ?></legend>
+            <div class="wd-layout-switch__options">
+                <?php foreach ($modes as $mode => $label) : ?>
+                    <label class="wd-check">
+                        <input type="radio" name="<?php echo esc_attr($name . '[mode]'); ?>" value="<?php echo esc_attr($mode); ?>" data-wd-layout-mode <?php checked($card['mode'], $mode); ?>>
+                        <?php echo esc_html($label); ?>
+                    </label>
+                <?php endforeach; ?>
+            </div>
+        </fieldset>
+        <div class="wd-layout-panel" data-wd-layout-panel="<?php echo esc_attr($standard); ?>">
         <?php foreach ($args['groups'] as $index => $group) : ?>
             <?php if ($index > 0) : ?>
                 <hr class="wd-divider">
@@ -320,5 +347,36 @@ $hint_state = static fn (array $rule): string => match (true) {
                 <?php endif; ?>
             <?php endforeach; ?>
         <?php endforeach; ?>
+        </div>
+        <div class="wd-layout-panel wd-editor" data-wd-layout-panel="<?php echo esc_attr($advanced); ?>" data-wd-generated="<?php echo esc_attr($args['generated']); ?>" data-wd-confirm="<?php esc_attr_e('Switch to Standard? Your changes to the Advance template will be lost.', 'wicket-directory'); ?>">
+            <div class="wd-editor__tools" data-wd-editor-tools hidden>
+                <label class="screen-reader-text" for="<?php echo esc_attr($id_prefix . 'field-picker'); ?>"><?php esc_html_e('Insert a field', 'wicket-directory'); ?></label>
+                <select id="<?php echo esc_attr($id_prefix . 'field-picker'); ?>" class="wd-field" data-wd-field-picker>
+                    <option value=""><?php esc_html_e('Select a Field…', 'wicket-directory'); ?></option>
+                    <?php foreach ($args['fields'] as $field_group) : ?>
+                        <optgroup label="<?php echo esc_attr($field_group['label']); ?>">
+                            <?php foreach ($field_group['fields'] as $tag => $label) : ?>
+                                <option value="<?php echo esc_attr((string) $tag); ?>"><?php echo esc_html($label); ?></option>
+                            <?php endforeach; ?>
+                        </optgroup>
+                    <?php endforeach; ?>
+                </select>
+                <button type="button" class="button-link" aria-expanded="false" aria-controls="<?php echo esc_attr($id_prefix . 'custom-path'); ?>" data-wd-custom-toggle><?php esc_html_e('Use Custom Field Path', 'wicket-directory'); ?></button>
+                <div class="wd-editor__custom" id="<?php echo esc_attr($id_prefix . 'custom-path'); ?>" data-wd-custom hidden>
+                    <label class="wd-sublabel" for="<?php echo esc_attr($id_prefix . 'custom-path-input'); ?>"><?php esc_html_e('Field path', 'wicket-directory'); ?></label>
+                    <div class="wd-editor__custom-row">
+                        <input type="text" id="<?php echo esc_attr($id_prefix . 'custom-path-input'); ?>" class="wd-field code" placeholder="data_fields.schema_key.field" spellcheck="false" data-wd-custom-path>
+                        <button type="button" class="button" data-wd-custom-insert><?php esc_html_e('Insert', 'wicket-directory'); ?></button>
+                    </div>
+                    <p class="wd-help"><?php esc_html_e('Any merge tag, without the braces: a data field (data_fields.schema_key.field), a contact record (emails[type=work].address) or a value a developer adds (extra.key).', 'wicket-directory'); ?></p>
+                </div>
+            </div>
+            <label class="wd-sublabel" for="<?php echo esc_attr($id_prefix . 'template'); ?>"><?php esc_html_e('Card template', 'wicket-directory'); ?></label>
+            <textarea id="<?php echo esc_attr($id_prefix . 'template'); ?>" class="wd-editor__template code" name="<?php echo esc_attr($name . '[template]'); ?>" rows="14" spellcheck="false" data-wd-template><?php echo esc_textarea($card['template']); ?></textarea>
+            <input type="hidden" name="<?php echo esc_attr($name . '[template_dirty]'); ?>" value="<?php echo $card['template_dirty'] ? '1' : '0'; ?>" data-wd-dirty disabled>
+            <p class="wd-help" data-wd-stale hidden><?php esc_html_e('This template follows the Standard settings as last saved. Saving updates it with the changes you made there, unless you edit it first.', 'wicket-directory'); ?></p>
+            <p class="wd-help"><?php esc_html_e('One card row per line. {{field}} prints a field; any other text shows as written. [col] … [/col] makes a column, and columns in a row sit side by side. A line starting with "# " is the card title, "## " a heading. A line whose fields are all empty is left out.', 'wicket-directory'); ?></p>
+            <p class="wd-help"><?php esc_html_e('An empty template shows the Standard layout.', 'wicket-directory'); ?></p>
+        </div>
     </div>
 </div>

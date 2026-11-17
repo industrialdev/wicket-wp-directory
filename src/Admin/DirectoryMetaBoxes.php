@@ -12,6 +12,8 @@ use Wicket\Directory\Data\ContactResolver;
 use Wicket\Directory\Data\EnumLabels;
 use Wicket\Directory\PostType\DirectoryPostType;
 use Wicket\Directory\Query\RequestParams;
+use Wicket\Directory\Template\FieldCatalog;
+use Wicket\Directory\Template\TemplateGenerator;
 use WP_Post;
 
 /**
@@ -272,6 +274,11 @@ final class DirectoryMetaBoxes
     /**
      * Print the Card View tab: what each card shows.
      *
+     * Each card has a Layout switch: Standard (the checklist) or Advance (its
+     * `[col]` / `{{field}}` template, with a field picker from
+     * Template\FieldCatalog and the template the checklist stands for, from
+     * Template\TemplateGenerator, to start from).
+     *
      * Only the saved type's settings are shown, in card_groups() order. A type
      * change resets the card on save, so the tab asks the admin to save first.
      * As in the Directory panels, saved data fields and contact types the MDP
@@ -304,7 +311,7 @@ final class DirectoryMetaBoxes
                 'id_prefix' => 'wicket-directory-member-card-',
                 'label'     => __('Group Member card details', 'wicket-directory'),
                 'intro'     => __('Choose what each member\'s card shows in a group\'s member list. Contact details start off: the list is public.', 'wicket-directory'),
-            ] + $this->card_view_args($config, $config->member_card, DirectoryType::Individual, self::member_card_fields(), self::member_card_groups(), $lang)),
+            ] + $this->card_view_args($config, $config->member_card, DirectoryType::Individual, self::member_card_fields(), self::member_card_groups(), $lang, true)),
         ]);
     }
 
@@ -384,10 +391,11 @@ final class DirectoryMetaBoxes
      * @param array{toggles: array<string, array{label: string, description: string}>, refs: array<string, array{label: string, description: string, kinds: list<string>}>, contacts: array<string, string>} $fields From card_fields().
      * @param list<list<string>>   $groups      From card_groups().
      * @param string               $lang        Two-letter language code.
+     * @param bool                 $members     The Group Member card.
      *
      * @return array<string, mixed>
      */
-    private function card_view_args(DirectoryConfig $config, array $card, DirectoryType $schema_type, array $fields, array $groups, string $lang): array
+    private function card_view_args(DirectoryConfig $config, array $card, DirectoryType $schema_type, array $fields, array $groups, string $lang, bool $members = false): array
     {
         $schemas = $this->schema_fields->for_type($schema_type, $lang);
         $tag_values = array_map(self::ref_value(...), $card['tag_chips'] ?? []);
@@ -489,7 +497,34 @@ final class DirectoryMetaBoxes
                 'city_province_country' => __('City, province/state, country', 'wicket-directory'),
                 'city_province'         => __('City, province/state', 'wicket-directory'),
             ],
+            'fields'                => FieldCatalog::grouped($config->type, $members, self::catalog_data_fields($schemas)),
+            'generated'             => TemplateGenerator::generate($config->type, $card, $members),
         ];
+    }
+
+    /**
+     * The data fields the Advance editor's field picker lists: every field of
+     * the card's schemas, labelled "Schema › Field".
+     *
+     * @param array<string, array{label: string, fields: array<string, array{label: string, kind: string, enum: bool}>}> $schemas From SchemaFields::for_type().
+     *
+     * @return list<array{schema_key: string, field: string, label: string}>
+     */
+    private static function catalog_data_fields(array $schemas): array
+    {
+        $fields = [];
+
+        foreach ($schemas as $schema_key => $schema) {
+            foreach ($schema['fields'] as $field => $meta) {
+                $fields[] = [
+                    'schema_key' => (string) $schema_key,
+                    'field'      => (string) $field,
+                    'label'      => $schema['label'] . ' › ' . $meta['label'],
+                ];
+            }
+        }
+
+        return $fields;
     }
 
     /**

@@ -168,6 +168,76 @@
 	border-top: 0;
 }
 
+/* Card layout: Standard or Advance */
+
+.wicket-directory-admin .wd-layout-switch {
+	margin: 0 0 12px;
+	padding: 0 0 10px;
+	border: 0;
+	border-bottom: 1px solid var(--wd-admin-border-faint);
+}
+
+.wicket-directory-admin .wd-layout-switch .wd-sublabel {
+	margin-top: 0;
+}
+
+.wicket-directory-admin .wd-layout-switch__options {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0 24px;
+}
+
+/* Without the script both layouts show; keep them apart. */
+.wicket-directory-admin .wd-layout-panel + .wd-layout-panel {
+	margin-top: 18px;
+}
+
+.wicket-directory-admin .wd-layout-panel[hidden] + .wd-layout-panel {
+	margin-top: 0;
+}
+
+.wicket-directory-admin .wd-editor__tools {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 16px;
+	margin: 0 0 6px;
+}
+
+.wicket-directory-admin .wd-editor__tools .wd-field {
+	width: auto;
+	min-width: 220px;
+}
+
+.wicket-directory-admin .wd-editor__custom {
+	flex: 1 1 100%;
+}
+
+.wicket-directory-admin .wd-editor__custom .wd-sublabel {
+	margin-top: 0;
+}
+
+.wicket-directory-admin .wd-editor__custom-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.wicket-directory-admin .wd-editor__custom-row .wd-field {
+	flex: 1 1 220px;
+}
+
+.wicket-directory-admin .wd-editor__template {
+	display: block;
+	width: 100%;
+	min-height: 240px;
+	padding: 8px 10px;
+	font-size: 13px;
+	line-height: 1.5;
+	tab-size: 4;
+	resize: vertical;
+}
+
 /* Tabs */
 
 .wicket-directory-admin .wd-tabs {

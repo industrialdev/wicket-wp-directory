@@ -4,9 +4,8 @@ Wicket Directory adds configurable public directories of **Individuals** and **O
 
 > **Status: in development (scaffold landed).** The approved plan is `docs/engineering/mvp-plan.md`. Read it before writing code; it is the source of truth for scope, data model and decisions. Classes and paths below are the planned layout unless marked as landed. Update this file as they land.
 
-MVP scope: Individual and Organization directories only. Phase 2 (`docs/engineering/phase-2-tickets.md`) is under way: the Group directory type landed in P2.1 (config, query builder, eligibility, data, admin), its card in P2.2, group member lists (Default View, View Members, Back to Directory) in P2.3, the Group Member card with its own card config and facets in P2.4, Organization Contact on the org card (Membership Owner / Relationship Types) in P2.5, Employer on the individual and Group Member cards (Designation = the post-nominal field) in P2.6, and the `[col]/{{field}}` merge-tag card template engine (Advance cards: config, render path, field catalog, Standard → template generator) in P2.7. These are still deferred, so don't build them without being asked:
+MVP scope: Individual and Organization directories only. Phase 2 (`docs/engineering/phase-2-tickets.md`) is under way: the Group directory type landed in P2.1 (config, query builder, eligibility, data, admin), its card in P2.2, group member lists (Default View, View Members, Back to Directory) in P2.3, the Group Member card with its own card config and facets in P2.4, Organization Contact on the org card (Membership Owner / Relationship Types) in P2.5, Employer on the individual and Group Member cards (Designation = the post-nominal field) in P2.6, and the `[col]/{{field}}` merge-tag card template engine (Advance cards: config, render path, field catalog, Standard → template generator) in P2.7, and its admin editor (Standard / Advance switch, template textarea, field picker, dirty flag) in P2.8. This is still deferred, so don't build it without being asked:
 - the Developer panel UI
-- the Advance Configurations editor (P2.8): Standard / Advance switch, the template textarea and field picker, the dirty flag. Until then a card's `mode` and `template` post back in hidden inputs
 
 ## Commands
 
@@ -63,6 +62,9 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
                                  TEMPLATE_MAX_LENGTH). template(members) = the Advance template, else null. for_render() (the renderer calls it once)
                                  sets an Advance card's toggles from its tags (FieldCatalog::toggles(); unused off, OPTION_TOGGLES and org_contact
                                  options only on), so batches and the mapper fill what the template prints; the stored config is never changed
+                                 `template_dirty` (P2.8; LAYOUT_KEYS = mode, template, template_dirty): the admin edited the template. Never set on an
+                                 empty template; missing or invalid = set (configs before P2.8, the editor without its script). An Advance template
+                                 that isn't dirty is rewritten from the card's toggles on every sanitize (TemplateGenerator), so it follows them
     Admin\DirectoryMetaBoxes     (landed, admin only) one "Directory settings" meta box (render_box → views/settings.php); posts `wicket_directory[...]`;
                                  save_post handler lays the posted SECTIONS (`type`, `eligibility`, `card`, `facets`, `member_card`, `member_facets`,
                                  `roster`) over the stored config
@@ -79,9 +81,15 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
                                  relationship-type chips, toggles, and nested email / phone rules); views/contact-rule.php is the shared contact rule.
                                  Person cards have an Employer item after Job title (data-wd-item="employer": relationship-type chips, label toggle);
                                  the post_nominal field is labelled "Designation"
+                                 Above each checklist a Layout switch (P2.8; `mode` radios, `data-wd-layout-panel` standard | advanced, both always post):
+                                 Advance = the template textarea, a "Select a Field…" picker (FieldCatalog::grouped() + the card's schema data fields)
+                                 and "Use Custom Field Path" (neither posts), `data-wd-generated` = TemplateGenerator of the saved toggles, and the
+                                 `template_dirty` hidden input, disabled until the script enables it
                                  + member list facets (person enum data fields; section `member_facets`). views/card-switch.php (render_card_switch, above
                                  the tabs, Group List + Member List only) picks one; the other views show only the card they reach
-                                 assets/js/admin.js (no build): type toggles, tabs, popovers, chips, reveals and contact hints, facet repeater;
+                                 assets/js/admin.js (no build): type toggles, tabs, popovers, chips, reveals and contact hints, layout switch (fills the
+                                 template on Standard → Advance unless dirty, sets dirty on typing / insert, confirm on Advance → Standard when dirty,
+                                 which clears the template), facet repeater;
                                  assets/css/admin.css styles the box. Everything posts the same without the script
       → Admin\MembershipTiers    (landed) tier choices from GET memberships, filtered by type
       → Admin\ResourceTypes      (landed) one GET resource_types: org types, group types, relationship types and contact record types (ContactResolver::RELATIONSHIPS)
@@ -183,9 +191,9 @@ Template\MergeTags         resolve(tag, CardContext) → TagValue (items = escap
                            3 catalog: entry properties (after the entry filters), data_fields.{schema}.{field} (enum labels), extra.{key}
                            4 FieldCatalog::ALIASES (first_name, legal_name, title, designation…) 5 '' (never an error or a raw tag)
 Template\FieldCatalog      fields(type, members, data_fields) / grouped(): tag => label, group (Profile, Group, Addresses, Email, Phone, Website,
-                           Membership, Connections, Data Fields), toggles. Backs the P2.8 picker. toggles(tags) / all_toggles() for for_render()
+                           Membership, Connections, Data Fields), toggles. Backs the Advance editor's picker. toggles(tags) / all_toggles() for for_render()
 Template\TemplateGenerator generate(type, card, members): the template a Standard card stands for, in the PHP card's order; only fields its
-                           toggles turn on, so for_render() of it gives back the same toggles (P2.8 prefills Advance with it)
+                           toggles turn on, so for_render() of it gives back the same toggles (the editor prefills Advance with it)
 Template\CardContext / TagValue  value objects
 ```
 
