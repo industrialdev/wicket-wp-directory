@@ -673,3 +673,46 @@ document
 		sync();
 		filter();
 	} );
+
+/**
+ * Developer tab: Copy buttons (`[data-wd-copy]`) put their text on the
+ * clipboard and say "Copied" (`data-wd-copied`) for a moment. When the browser
+ * refuses, the name next to the button is selected instead, ready for
+ * Ctrl/Cmd+C. The buttons stay hidden where the Clipboard API isn't available
+ * (it needs a secure context); the names can still be selected by hand.
+ */
+( function () {
+	const buttons = document.querySelectorAll( '[data-wd-copy]' );
+
+	if ( ! buttons.length || ! window.navigator.clipboard ) {
+		return;
+	}
+
+	buttons.forEach( ( button ) => {
+		const label = button.textContent.trim();
+		let timer;
+
+		button.hidden = false;
+		button.addEventListener( 'click', () => {
+			window.navigator.clipboard
+				.writeText( button.dataset.wdCopy )
+				.then( () => {
+					button.textContent = button.dataset.wdCopied || 'Copied';
+					window.clearTimeout( timer );
+					timer = window.setTimeout( () => {
+						button.textContent = label;
+					}, 1500 );
+				} )
+				.catch( () => {
+					const code = button.parentElement.querySelector( 'code' );
+					const range = code.ownerDocument.createRange();
+					const selection =
+						code.ownerDocument.defaultView.getSelection();
+
+					range.selectNodeContents( code );
+					selection.removeAllRanges();
+					selection.addRange( range );
+				} );
+		} );
+	} );
+} )();

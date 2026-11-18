@@ -4,8 +4,7 @@ Wicket Directory adds configurable public directories of **Individuals** and **O
 
 > **Status: in development (scaffold landed).** The approved plan is `docs/engineering/mvp-plan.md`. Read it before writing code; it is the source of truth for scope, data model and decisions. Classes and paths below are the planned layout unless marked as landed. Update this file as they land.
 
-MVP scope: Individual and Organization directories only. Phase 2 (`docs/engineering/phase-2-tickets.md`) is under way: the Group directory type landed in P2.1 (config, query builder, eligibility, data, admin), its card in P2.2, group member lists (Default View, View Members, Back to Directory) in P2.3, the Group Member card with its own card config and facets in P2.4, Organization Contact on the org card (Membership Owner / Relationship Types) in P2.5, Employer on the individual and Group Member cards (Designation = the post-nominal field) in P2.6, and the `[col]/{{field}}` merge-tag card template engine (Advance cards: config, render path, field catalog, Standard → template generator) in P2.7, and its admin editor (Standard / Advance switch, template textarea, field picker, dirty flag) in P2.8. This is still deferred, so don't build it without being asked:
-- the Developer panel UI
+MVP scope: Individual and Organization directories only. Phase 2 (`docs/engineering/phase-2-tickets.md`) is under way: the Group directory type landed in P2.1 (config, query builder, eligibility, data, admin), its card in P2.2, group member lists (Default View, View Members, Back to Directory) in P2.3, the Group Member card with its own card config and facets in P2.4, Organization Contact on the org card (Membership Owner / Relationship Types) in P2.5, Employer on the individual and Group Member cards (Designation = the post-nominal field) in P2.6, and the `[col]/{{field}}` merge-tag card template engine (Advance cards: config, render path, field catalog, Standard → template generator) in P2.7, its admin editor (Standard / Advance switch, template textarea, field picker, dirty flag) in P2.8, and the Developer tab (Custom code switch, Developer Notes, hook reference, registered custom fields, Custom Code label on All Directories) in P2.9. Still to do, so don't build them without being asked: the admin live card preview (P2.10) and the Phase 2 acceptance pass (P2.11).
 
 ## Commands
 
@@ -65,16 +64,20 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
                                  `template_dirty` (P2.8; LAYOUT_KEYS = mode, template, template_dirty): the admin edited the template. Never set on an
                                  empty template; missing or invalid = set (configs before P2.8, the editor without its script). An Advance template
                                  that isn't dirty is rewritten from the card's toggles on every sanitize (TemplateGenerator), so it follows them
+                                 `developer` section (P2.9; defaults false / ''): custom_code (has_custom_code()) and notes (plain text, \n, max
+                                 NOTES_MAX_LENGTH). Admin labels only: nothing reads them to render. Kept on a type change
     Admin\DirectoryMetaBoxes     (landed, admin only) one "Directory settings" meta box (render_box → views/settings.php); posts `wicket_directory[...]`;
                                  save_post handler lays the posted SECTIONS (`type`, `eligibility`, `card`, `facets`, `member_card`, `member_facets`,
-                                 `roster`) over the stored config
+                                 `roster`, `developer`) over the stored config
                                  → DirectoryConfig::sanitize(…, previous) (nonce, manage_options + edit_post). Directory panels on top (views/directory.php:
                                  type select, chip pickers for tiers/org types, active-members, opt-in; for groups: Group status, group types, groups to exclude.
                                  `data-wd-type` takes space-separated types; Default view, Group and Group member status panels use `data-wd-view` too),
-                                 then tabs Card View (views/card.php; one checklist in
-                                 card_groups(type) order, card_fields(type) lists its controls; ticked items reveal their options) and Filters
+                                 then tabs Card View, Filters and Developer. Card View (views/card.php; one checklist in
+                                 card_groups(type) order, card_fields(type) lists its controls; ticked items reveal their options); Filters
                                  (views/filters.php; facet_choices(type, schemas) = org type + enum data fields, or group type only; a hidden `facets` marker lets "no rows" save;
-                                 searchable picker); views/chip-picker.php is the shared multi-select. Data-field pickers post "schema_key.field".
+                                 searchable picker); Developer (P2.9, views/developer.php, render_developer_box: Custom code switch (role="switch",
+                                 hidden "0"), notes textarea, DeveloperTab::hooks(post_name) and DeveloperTab::fields(); Copy buttons `data-wd-copy`,
+                                 hidden until the script finds the Clipboard API). views/chip-picker.php is the shared multi-select. Data-field pickers post "schema_key.field".
                                  A group directory's tabs hold both cards in `data-wd-card="group|member"` sections: the Group card + facets, and the
                                  Group Member card (member_card_fields(), member_card_groups(); section `member_card`, ids `wicket-directory-member-card-*`)
                                  Organization cards end with an Organization Contact item (data-wd-item="org-contact": source radios `data-wd-mode`,
@@ -82,23 +85,28 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
                                  Person cards have an Employer item after Job title (data-wd-item="employer": relationship-type chips, label toggle);
                                  the post_nominal field is labelled "Designation"
                                  Above each checklist a Layout switch (P2.8; `mode` radios, `data-wd-layout-panel` standard | advanced, both always post):
-                                 Advance = the template textarea, a "Select a Field…" picker (FieldCatalog::grouped() + the card's schema data fields)
+                                 Advance = the template textarea, a "Select a Field…" picker (FieldCatalog::grouped() + the card's schema data fields,
+                                 then a Custom Fields group of `extra.{key}` tags: custom_field_group(DeveloperTab::fields()), one filter run per box)
                                  and "Use Custom Field Path" (neither posts), `data-wd-generated` = TemplateGenerator of the saved toggles, and the
                                  `template_dirty` hidden input, disabled until the script enables it
                                  + member list facets (person enum data fields; section `member_facets`). views/card-switch.php (render_card_switch, above
                                  the tabs, Group List + Member List only) picks one; the other views show only the card they reach
                                  assets/js/admin.js (no build): type toggles, tabs, popovers, chips, reveals and contact hints, layout switch (fills the
                                  template on Standard → Advance unless dirty, sets dirty on typing / insert, confirm on Advance → Standard when dirty,
-                                 which clears the template), facet repeater;
+                                 which clears the template), facet repeater, Copy buttons (select the name when the clipboard refuses);
                                  assets/css/admin.css styles the box. Everything posts the same without the script
       → Admin\MembershipTiers    (landed) tier choices from GET memberships, filtered by type
       → Admin\ResourceTypes      (landed) one GET resource_types: org types, group types, relationship types and contact record types (ContactResolver::RELATIONSHIPS)
       → Admin\SchemaFields       (landed) GET json_schemas?include=json_schema_resources: the type's text/list data fields, with an enum flag (none for groups)
       → Admin\Groups             (landed) one groups/query (2000, sorted name_{lang}): every group for the exclude picker; loaded for saved group directories only
+      → Admin\DeveloperTab       (landed, P2.9) hooks(slug): every wicket_directory/* hook in render order, kind, args, description and its `_{slug}`
+                                 name (null when it has none; `{slug}` while post_name is empty). fields(config, post): applies wicket_directory/fields,
+                                 then _{slug}; keys [A-Za-z0-9_-], string = label, list items name their `key`; first of a key wins; tag {{extra.key}}
     Api\DirectoryCache           (landed) save_post_wicket_directory (priority 20, after the settings save) and before_delete_post → purge(ID):
                                  deletes the directory's `wicket_directory_{ID}_*` transients and the `wicket_directory_labels_*` ones. Under a
                                  persistent object cache: label transients by name per known language; results expire (their keys already changed)
-    Admin\ListColumns            (landed, admin only) Type and Status columns after Title on All Directories; non-published rows say "Not shown on the site"
+    Admin\ListColumns            (landed, admin only) Type and Status columns after Title on All Directories; non-published rows say "Not shown on the site";
+                                 a "Custom Code" pill (`.wicket-directory-pill`) under the type when has_custom_code(); enqueues admin.css on edit.php
     Block\DirectoryBlock         (landed) dynamic block `wicket/directory` registered from build/directory (built from blocks/directory); adds the `wicket` category if missing;
                                  render_callback → DirectoryRenderer; enqueue_style() puts directory.css in the <head> of a post that has the block;
                                  enqueue_editor_data() prints window.wicketDirectoryEditor.sortOptions (DirectoryType::sort_options() per type) before the editor script
@@ -240,6 +248,7 @@ There is **one render path**. The frontend and the block editor preview both go 
 | `wicket_directory/card_template` (filter) | (landed) Swap the card template file, once per render. Gets the located absolute path (`''` when none), `DirectoryConfig` (as for_render() gives it), the directory `WP_Post`. A return that isn't an existing file keeps the located one. An Advance card's located file is `cards/card-template.php` |
 | `wicket_directory/cache_ttl` (filter) | (landed) API response cache lifetime in seconds (default 600). Gets `$ttl`, `DirectoryConfig`, the directory `WP_Post`. `0` disables the cache |
 | `wicket_directory/labels_cache_ttl` (filter) | (landed) Lifetime of the per-language enum and org-type label transient that facets and cards share (default 3600). Gets `$ttl`, `$lang`. `0` disables it |
+| `wicket_directory/fields`, `wicket_directory/fields_{slug}` (filter) | (landed, P2.9) Register the custom fields your code adds, so the Developer tab lists them with their merge tag and the Advance editor's field picker offers them under Custom Fields. Gets `$fields` (`[]`), `DirectoryConfig`, the directory `WP_Post`; returns the array. Add `$fields['key'] = 'Label'` or `['label' => …, 'description' => …]` (or a list item with a `key`), keyed by what your `wicket_directory/entry` callback puts under `extra`, so an Advance card prints it with `{{extra.key}}`. Keys may hold letters, digits, `_` and `-`; others are dropped. Edit screen only: rendering never runs it |
 
 ## Code Style
 

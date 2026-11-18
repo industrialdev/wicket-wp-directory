@@ -27,7 +27,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | P2.6 | [Individual card: Employer, Designation and relationship types](#p26) | P2.0 | Done |
 | P2.7 | [Merge-tag card template engine (`[col]` / `{{field}}`)](#p27) | P2.4, P2.5, P2.6 | Done |
 | P2.8 | [Admin Advance Configurations editor](#p28) | P2.7 | Done |
-| P2.9 | [Developer tab: custom code switch, notes, hook reference and custom fields](#p29) | — | To do |
+| P2.9 | [Developer tab: custom code switch, notes, hook reference and custom fields](#p29) | — | Done |
 | P2.10 | [Admin live card preview](#p210) | P2.7 | To do |
 | P2.11 | [Phase 2 acceptance: theme check, docs and Atlas](#p211) | P2.1–P2.10 | To do |
 
@@ -348,6 +348,25 @@ A Developer tab on the edit screen, so anyone can tell at a glance that a direct
 
 - No change to rendering.
 - Unit tests for config sanitize and the hook list.
+
+**Outcome (2026-11-17):**
+
+- **Config.** A new `developer` section, `{custom_code: bool, notes: string}`, defaults `false` / `''`, so configs saved before P2.9 read back without custom code. The notes are plain text: tags stripped, line breaks normalized to `\n`, at most `DirectoryConfig::NOTES_MAX_LENGTH` (5000) characters. The section describes the directory, not its type, so a type change keeps it. `DirectoryConfig::has_custom_code()` reads the switch. Nothing on the render path reads the section; `for_render()` carries it unchanged. The config meta's REST schema lists the `developer` key, like every other top-level key (its top level has `additionalProperties: false`).
+- **Developer tab** (`views/developer.php`, after Filters; section `developer` in `DirectoryMetaBoxes::SECTIONS`). Three panels:
+  - **Custom code**: a switch (a checkbox with `role="switch"` and its hidden "0"), the Developer Notes textarea, and a line saying the tab never runs, writes or turns off code.
+  - **Hook reference** (`Admin\DeveloperTab::hooks($slug)`): every `wicket_directory/*` hook in render order, with its kind, arguments and a one-line description, and, where it has one, its "This directory only" name, `{name}_{slug}`. A unit test scans `src/` for `apply_filters` / `do_action` calls, so the list can't drift from the hooks the plugin fires. Before WordPress sets a slug (an unpublished directory) the names end in `{slug}` and a note says so; otherwise a note warns that changing the slug renames them.
+  - **Registered custom fields** (`DeveloperTab::fields()`): the new filter, below. Each field shows its label, description and merge tag `{{extra.key}}`. With none, the panel explains how to register them.
+
+  The Card View's Advance field picker also lists them, last, in a Custom Fields group (`DirectoryMetaBoxes::custom_field_group()`; options `extra.{key}`), on both of a group directory's cards. The filter runs once per Card View. A custom field needs no card toggle, so picking one never changes what a render fetches.
+
+  Each name and merge tag has a Copy button. The buttons are `hidden` until `admin.js` finds the Clipboard API (secure contexts only). When the browser refuses the write, the script selects the name instead, ready for Ctrl/Cmd+C.
+- **New filter: `wicket_directory/fields`, then `wicket_directory/fields_{slug}`.** Args: `$fields` (`[]`), `DirectoryConfig`, the directory `WP_Post`. A callback registers fields by the key its `wicket_directory/entry` callback uses under `extra`: `$fields['chapter'] = 'Chapter'`, or `['label' => …, 'description' => …]`, or a list item with its own `key`. A key may hold letters, digits, `_` and `-` (what a merge tag needs); other entries are dropped, and the first of a repeated key wins. A field without a label shows its key. Only the edit screen runs the filter (the Developer tab and the field picker); rendering never does. Documented in AGENTS.md.
+- **All Directories.** A "Custom Code" pill (`.wicket-directory-pill`) under the type in the Type column when the switch is on. `ListColumns` loads `admin.css` on that screen for it.
+- **Checked:**
+  - Unit tests in `qa`: `DeveloperTabTest` (config defaults, coercion, notes sanitizing, type change, render copy; the hook list and its match with the source; the fields filter's order and normalizing; the tab's markup and saves; the picker's Custom Fields group on one and two cards; the pill and the list-screen style; the REST schema). `DirectoryMetaBoxesTest`, `GroupConfigTest` and `RosterConfigTest` expect the new `developer` key in the stored shape.
+  - The box, rendered by `wp eval` on the local stack for a real directory (with a test filter and an injected config; nothing saved), viewed on a static page with WP admin's CSS and `admin.js`: switch, Copy (both the clipboard and the refused path), fields table, and no overflow at 375px.
+  - The Card View of a real group directory, rendered by `wp eval` with a test filter: both pickers list the Custom Fields group.
+  - Not checked in WP admin itself: the browser pane doesn't trust the local stack's certificate.
 
 <a id="p210"></a>
 

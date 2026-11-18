@@ -1,8 +1,9 @@
 /**
- * Directory edit screen: the settings box.
+ * Directory edit screen: the settings box. Also All Directories, for the
+ * Custom Code label (`.wicket-directory-pill`).
  *
  * WP admin's own palette and the admin colour scheme's accent
- * (`--wp-admin-theme-color`). Only the edit screen loads it; the frontend
+ * (`--wp-admin-theme-color`). Only those two screens load it; the frontend
  * styles are `directory.css`.
  */
 
@@ -623,4 +624,140 @@
 	padding: 14px;
 	font-size: 13px;
 	color: var(--wd-admin-help);
+}
+
+/* Developer tab */
+
+.wicket-directory-admin .wd-switch input[type="checkbox"] {
+	position: relative;
+	width: 32px;
+	height: 18px;
+	margin: 0;
+	border: 1px solid var(--wd-admin-border);
+	border-radius: 9px;
+	background: var(--wd-admin-surface);
+	box-shadow: none;
+	appearance: none;
+	cursor: pointer;
+	transition: background-color 0.1s ease;
+}
+
+.wicket-directory-admin .wd-switch input[type="checkbox"]::before {
+	content: "";
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 12px;
+	height: 12px;
+	margin: 0;
+	border-radius: 50%;
+	background: var(--wd-admin-border);
+	transition: transform 0.1s ease;
+}
+
+.wicket-directory-admin .wd-switch input[type="checkbox"]:checked {
+	border-color: var(--wd-admin-accent);
+	background: var(--wd-admin-accent);
+}
+
+.wicket-directory-admin .wd-switch input[type="checkbox"]:checked::before {
+	background: var(--wd-admin-surface);
+	transform: translateX(14px);
+}
+
+.wicket-directory-admin .wd-switch input[type="checkbox"]:focus-visible {
+	outline: 2px solid var(--wd-admin-accent);
+	outline-offset: 2px;
+}
+
+.wicket-directory-admin .wd-hooks {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.wicket-directory-admin .wd-hook {
+	margin: 0;
+	padding: 12px 0;
+	border-top: 1px solid var(--wd-admin-border-faint);
+}
+
+.wicket-directory-admin .wd-hook:first-child {
+	padding-top: 0;
+	border-top: 0;
+}
+
+.wicket-directory-admin .wd-hook__name,
+.wicket-directory-admin .wd-hook__scoped {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.wicket-directory-admin .wd-hook__scoped {
+	margin-top: 6px;
+}
+
+.wicket-directory-admin .wd-hook__scoped .wd-caption {
+	margin: 0;
+}
+
+.wicket-directory-admin .wd-hook__kind {
+	padding: 1px 8px;
+	border-radius: 10px;
+	background: var(--wd-admin-chip);
+	font-size: 11px;
+	font-weight: 600;
+}
+
+.wicket-directory-admin .wd-hook__kind--action {
+	background: var(--wd-admin-accent-soft);
+	color: var(--wd-admin-accent);
+}
+
+.wicket-directory-admin .wd-hook__args {
+	margin: 4px 0 0;
+	font-size: 12px;
+}
+
+.wicket-directory-admin .wd-hook__args code {
+	background: none;
+	padding: 0;
+	font-size: 12px;
+	color: var(--wd-admin-label);
+	overflow-wrap: anywhere;
+}
+
+.wicket-directory-admin .wd-copy {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+
+.wicket-directory-admin .wd-copy .wd-code {
+	font-size: 12px;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	user-select: all;
+}
+
+.wicket-directory-admin .wd-fields td {
+	vertical-align: middle;
+}
+
+/* All Directories: the Custom Code label (ListColumns). */
+
+.wicket-directory-pill {
+	display: inline-block;
+	margin-top: 4px;
+	padding: 1px 8px;
+	border-radius: 10px;
+	background: #f0f6fc;
+	color: var(--wp-admin-theme-color, #2271b1);
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 1.6;
+	white-space: nowrap;
 }

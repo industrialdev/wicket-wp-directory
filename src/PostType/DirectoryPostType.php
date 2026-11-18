@@ -288,6 +288,7 @@ final class DirectoryPostType
                     'items' => $open_object,
                 ],
                 'roster'        => $open_object,
+                'developer'     => $open_object,
                 'cache_version' => [
                     'type'    => 'integer',
                     'minimum' => 0,

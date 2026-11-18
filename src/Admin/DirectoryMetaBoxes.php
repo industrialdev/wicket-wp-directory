@@ -20,7 +20,7 @@ use WP_Post;
  * The settings meta box on the classic directory edit screen, and its save handler.
  *
  * One box holds the whole config: the Directory panels (type and eligibility)
- * on top, then the Card View and Filters tabs. A group directory has two
+ * on top, then the Card View, Filters and Developer tabs. A group directory has two
  * cards, each with its own facets: the Group card, and the Group Member card
  * of its member lists. Both tabs hold both (`data-wd-card`); in the Group List
  * + Member List view a switch above the tabs picks the one to set up, and the
@@ -54,7 +54,7 @@ final class DirectoryMetaBoxes
      * Config sections the box posts. Each one replaces the stored section as
      * a whole, so every field of a section must have a control.
      */
-    public const SECTIONS = ['type', 'eligibility', 'card', 'facets', 'member_card', 'member_facets', 'roster'];
+    public const SECTIONS = ['type', 'eligibility', 'card', 'facets', 'member_card', 'member_facets', 'roster', 'developer'];
 
     /**
      * `data-wd-card` of the group card's settings.
@@ -65,6 +65,11 @@ final class DirectoryMetaBoxes
      * `data-wd-card` of the Group Member card's settings.
      */
     public const CARD_MEMBER = 'member';
+
+    /**
+     * Key of the field picker's group of registered custom fields.
+     */
+    public const CUSTOM_FIELDS = 'custom';
 
     /**
      * Script handle for the edit screen.
@@ -145,7 +150,7 @@ final class DirectoryMetaBoxes
 
     /**
      * Print the settings box: the nonce, the Directory panels, then the Card
-     * View and Filters tabs.
+     * View, Filters and Developer tabs.
      *
      * @param WP_Post $post Directory being edited.
      *
@@ -159,8 +164,9 @@ final class DirectoryMetaBoxes
             'directory' => fn () => $this->render_directory_box($post),
             'switch'    => fn () => $this->render_card_switch($post),
             'tabs'      => [
-                'card'    => [__('Card View', 'wicket-directory'), fn () => $this->render_card_box($post)],
-                'filters' => [__('Filters', 'wicket-directory'), fn () => $this->render_filters_box($post)],
+                'card'      => [__('Card View', 'wicket-directory'), fn () => $this->render_card_box($post)],
+                'filters'   => [__('Filters', 'wicket-directory'), fn () => $this->render_filters_box($post)],
+                'developer' => [__('Developer', 'wicket-directory'), fn () => $this->render_developer_box($post)],
             ],
         ]);
     }
@@ -277,7 +283,9 @@ final class DirectoryMetaBoxes
      * Each card has a Layout switch: Standard (the checklist) or Advance (its
      * `[col]` / `{{field}}` template, with a field picker from
      * Template\FieldCatalog and the template the checklist stands for, from
-     * Template\TemplateGenerator, to start from).
+     * Template\TemplateGenerator, to start from). The picker ends with the
+     * custom fields code registers (DeveloperTab::fields(), `extra.{key}`), on
+     * both of a group directory's cards.
      *
      * Only the saved type's settings are shown, in card_groups() order. A type
      * change resets the card on save, so the tab asks the admin to save first.
@@ -294,9 +302,10 @@ final class DirectoryMetaBoxes
     {
         $config = DirectoryConfig::from_post($post) ?? DirectoryConfig::defaults();
         $lang = (string) wicket_get_current_language();
+        $custom = self::custom_field_group(DeveloperTab::fields($config, $post));
 
         if ($config->type !== DirectoryType::Group) {
-            $this->view('card', $this->card_view_args($config, $config->card, $config->type, self::card_fields($config->type), self::card_groups($config->type), $lang));
+            $this->view('card', $this->card_view_args($config, $config->card, $config->type, self::card_fields($config->type), self::card_groups($config->type), $lang, false, $custom));
 
             return;
         }
@@ -305,13 +314,13 @@ final class DirectoryMetaBoxes
             self::CARD_GROUP  => fn () => $this->view('card', [
                 'label' => __('Group card details', 'wicket-directory'),
                 'intro' => __('Choose what each group\'s card shows in the group list.', 'wicket-directory'),
-            ] + $this->card_view_args($config, $config->card, DirectoryType::Group, self::card_fields(DirectoryType::Group), self::card_groups(DirectoryType::Group), $lang)),
+            ] + $this->card_view_args($config, $config->card, DirectoryType::Group, self::card_fields(DirectoryType::Group), self::card_groups(DirectoryType::Group), $lang, false, $custom)),
             self::CARD_MEMBER => fn () => $this->view('card', [
                 'section'   => 'member_card',
                 'id_prefix' => 'wicket-directory-member-card-',
                 'label'     => __('Group Member card details', 'wicket-directory'),
                 'intro'     => __('Choose what each member\'s card shows in a group\'s member list. Contact details start off: the list is public.', 'wicket-directory'),
-            ] + $this->card_view_args($config, $config->member_card, DirectoryType::Individual, self::member_card_fields(), self::member_card_groups(), $lang, true)),
+            ] + $this->card_view_args($config, $config->member_card, DirectoryType::Individual, self::member_card_fields(), self::member_card_groups(), $lang, true, $custom)),
         ]);
     }
 
@@ -355,6 +364,30 @@ final class DirectoryMetaBoxes
     }
 
     /**
+     * Print the Developer tab: the Custom code switch and Developer Notes, the
+     * hook reference with this directory's slug-scoped names, and the custom
+     * fields code registers (DeveloperTab).
+     *
+     * Nothing here changes how the directory renders.
+     *
+     * @param WP_Post $post Directory being edited.
+     *
+     * @return void
+     */
+    public function render_developer_box(WP_Post $post): void
+    {
+        $config = DirectoryConfig::from_post($post) ?? DirectoryConfig::defaults();
+
+        $this->view('developer', [
+            'field'     => self::FIELD,
+            'developer' => $config->developer,
+            'slug'      => $post->post_name,
+            'hooks'     => DeveloperTab::hooks($post->post_name),
+            'fields'    => DeveloperTab::fields($config, $post),
+        ]);
+    }
+
+    /**
      * Print a group directory's two card sections, Group and Group Member.
      *
      * Each is wrapped in `data-wd-card`. A section whose card the saved
@@ -392,10 +425,11 @@ final class DirectoryMetaBoxes
      * @param list<list<string>>   $groups      From card_groups().
      * @param string               $lang        Two-letter language code.
      * @param bool                 $members     The Group Member card.
+     * @param array<string, array{label: string, fields: array<string, string>}> $custom From custom_field_group(): added to the field picker.
      *
      * @return array<string, mixed>
      */
-    private function card_view_args(DirectoryConfig $config, array $card, DirectoryType $schema_type, array $fields, array $groups, string $lang, bool $members = false): array
+    private function card_view_args(DirectoryConfig $config, array $card, DirectoryType $schema_type, array $fields, array $groups, string $lang, bool $members = false, array $custom = []): array
     {
         $schemas = $this->schema_fields->for_type($schema_type, $lang);
         $tag_values = array_map(self::ref_value(...), $card['tag_chips'] ?? []);
@@ -497,9 +531,32 @@ final class DirectoryMetaBoxes
                 'city_province_country' => __('City, province/state, country', 'wicket-directory'),
                 'city_province'         => __('City, province/state', 'wicket-directory'),
             ],
-            'fields'                => FieldCatalog::grouped($config->type, $members, self::catalog_data_fields($schemas)),
+            'fields'                => FieldCatalog::grouped($config->type, $members, self::catalog_data_fields($schemas)) + $custom,
             'generated'             => TemplateGenerator::generate($config->type, $card, $members),
         ];
+    }
+
+    /**
+     * The field picker's Custom Fields group: the fields code registers
+     * through `wicket_directory/fields`, as `extra.{key}` tags.
+     *
+     * @param list<array{key: string, label: string, description: string, tag: string}> $fields From DeveloperTab::fields().
+     *
+     * @return array<string, array{label: string, fields: array<string, string>}> Empty when none are registered.
+     */
+    public static function custom_field_group(array $fields): array
+    {
+        if ($fields === []) {
+            return [];
+        }
+
+        $tags = [];
+
+        foreach ($fields as $field) {
+            $tags['extra.' . $field['key']] = $field['label'];
+        }
+
+        return [self::CUSTOM_FIELDS => ['label' => __('Custom Fields', 'wicket-directory'), 'fields' => $tags]];
     }
 
     /**

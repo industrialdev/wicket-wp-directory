@@ -13,7 +13,8 @@ use Wicket\Directory\PostType\DirectoryPostType;
  * Both go right after the title. There is no shortcode column: directories are
  * placed with the block. Title and Date stay WordPress's own, sortable as usual.
  * Only a published directory renders on the site, so every other status says
- * so under its label.
+ * so under its label. A directory marked as running custom code (Developer
+ * tab) gets a Custom Code label under its type.
  */
 final class ListColumns
 {
@@ -36,6 +37,29 @@ final class ListColumns
     {
         add_filter('manage_' . DirectoryPostType::POST_TYPE . '_posts_columns', [$this, 'columns']);
         add_action('manage_' . DirectoryPostType::POST_TYPE . '_posts_custom_column', [$this, 'render_column'], 10, 2);
+        add_action('admin_enqueue_scripts', [$this, 'enqueue_style']);
+    }
+
+    /**
+     * Load the admin styles (for the Custom Code label) on All Directories only.
+     *
+     * @param string $hook_suffix The current admin page.
+     *
+     * @return void
+     */
+    public function enqueue_style(string $hook_suffix): void
+    {
+        if ($hook_suffix !== 'edit.php') {
+            return;
+        }
+
+        $screen = get_current_screen();
+
+        if ($screen === null || $screen->post_type !== DirectoryPostType::POST_TYPE) {
+            return;
+        }
+
+        wp_enqueue_style(DirectoryMetaBoxes::STYLE_HANDLE, WICKET_DIRECTORY_URL . 'assets/css/admin.css', [], WICKET_DIRECTORY_VERSION);
     }
 
     /**
@@ -75,6 +99,10 @@ final class ListColumns
             $config = DirectoryConfig::from_post($post_id);
 
             echo $config !== null ? esc_html($config->type->label()) : '—';
+
+            if ($config?->has_custom_code()) {
+                echo '<br><span class="wicket-directory-pill">' . esc_html__('Custom Code', 'wicket-directory') . '</span>';
+            }
 
             return;
         }

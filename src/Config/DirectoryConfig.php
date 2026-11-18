@@ -29,6 +29,7 @@ use WP_Post;
  * @phpstan-type Roster array{default_view: string, group: string, member_status: string}
  * @phpstan-type OrgContact array{show: bool, source: string, relationship_types: list<string>, name: bool, title: bool, relationship: bool, email: ContactRule, phone: ContactRule}
  * @phpstan-type EmployerSettings array{show: bool, relationship_types: list<string>, relationship: bool}
+ * @phpstan-type Developer array{custom_code: bool, notes: string}
  */
 final class DirectoryConfig
 {
@@ -189,6 +190,11 @@ final class DirectoryConfig
     public const LAYOUT_KEYS = ['mode', 'template', 'template_dirty'];
 
     /**
+     * Longest Developer Notes kept, in characters.
+     */
+    public const NOTES_MAX_LENGTH = 5000;
+
+    /**
      * Use defaults(), from_post() or sanitize().
      *
      * @param DirectoryType        $type          What the directory lists.
@@ -204,6 +210,8 @@ final class DirectoryConfig
      *                                            Defaults for other types.
      * @param list<Facet>          $member_facets Group directories' member list facets (data fields
      *                                            on people), in display order. Empty for other types.
+     * @param Developer            $developer     The Developer tab: whether the directory runs custom
+     *                                            code, and notes about it. Admin only; never rendered.
      */
     private function __construct(
         public readonly DirectoryType $type,
@@ -214,6 +222,7 @@ final class DirectoryConfig
         public readonly array $roster,
         public readonly array $member_card,
         public readonly array $member_facets,
+        public readonly array $developer,
     ) {}
 
     /**
@@ -225,7 +234,7 @@ final class DirectoryConfig
      */
     public static function defaults(DirectoryType $type = DirectoryType::Individual): self
     {
-        return new self($type, self::eligibility_defaults(), self::card_defaults($type), [], 0, self::roster_defaults(), self::member_card_defaults(), []);
+        return new self($type, self::eligibility_defaults(), self::card_defaults($type), [], 0, self::roster_defaults(), self::member_card_defaults(), [], self::developer_defaults());
     }
 
     /**
@@ -266,6 +275,9 @@ final class DirectoryConfig
      *   sanitize_eligibility()), with or without $previous; so are the roster,
      *   the Group Member card and its facets of a type other than group;
      * - cache_version is the previous one plus one.
+     *
+     * The Developer settings describe the directory, not its type, so a type
+     * change keeps them.
      *
      * Without $previous the result depends only on $input, so sanitize() is
      * idempotent. That is how the meta sanitize_callback uses it.
@@ -311,14 +323,15 @@ final class DirectoryConfig
             : self::non_negative_int($input['cache_version'] ?? null);
 
         $roster = self::sanitize_roster(is_array($input['roster'] ?? null) ? $input['roster'] : [], $type);
+        $developer = self::sanitize_developer(is_array($input['developer'] ?? null) ? $input['developer'] : []);
 
-        return new self($type, $eligibility, $card, $facets, $cache_version, $roster, $member_card, $member_facets);
+        return new self($type, $eligibility, $card, $facets, $cache_version, $roster, $member_card, $member_facets, $developer);
     }
 
     /**
      * The config as stored in post meta.
      *
-     * @return array{type: string, eligibility: Eligibility, card: array<string, mixed>, facets: list<Facet>, member_card: array<string, mixed>, member_facets: list<Facet>, roster: Roster, cache_version: int}
+     * @return array{type: string, eligibility: Eligibility, card: array<string, mixed>, facets: list<Facet>, member_card: array<string, mixed>, member_facets: list<Facet>, roster: Roster, developer: Developer, cache_version: int}
      */
     public function to_array(): array
     {
@@ -330,8 +343,21 @@ final class DirectoryConfig
             'member_card'   => $this->member_card,
             'member_facets' => $this->member_facets,
             'roster'        => $this->roster,
+            'developer'     => $this->developer,
             'cache_version' => $this->cache_version,
         ];
+    }
+
+    /**
+     * Whether the directory is marked as running custom code (Developer tab).
+     *
+     * A label for admins only: nothing in the plugin runs or skips code because of it.
+     *
+     * @return bool
+     */
+    public function has_custom_code(): bool
+    {
+        return $this->developer['custom_code'];
     }
 
     /**
@@ -450,7 +476,7 @@ final class DirectoryConfig
             return $this;
         }
 
-        return new self($this->type, $this->eligibility, $card, $this->facets, $this->cache_version, $this->roster, $member_card, $this->member_facets);
+        return new self($this->type, $this->eligibility, $card, $this->facets, $this->cache_version, $this->roster, $member_card, $this->member_facets, $this->developer);
     }
 
     /**
@@ -656,6 +682,40 @@ final class DirectoryConfig
             'default_view'  => in_array($view, self::VIEWS, true) ? $view : $defaults['default_view'],
             'group'         => $group[0] ?? '',
             'member_status' => in_array($status, self::MEMBER_STATUSES, true) ? $status : $defaults['member_status'],
+        ];
+    }
+
+    /**
+     * Default Developer settings: no custom code, no notes.
+     *
+     * @return Developer
+     */
+    private static function developer_defaults(): array
+    {
+        return [
+            'custom_code' => false,
+            'notes'       => '',
+        ];
+    }
+
+    /**
+     * Sanitize the Developer settings.
+     *
+     * The notes are plain text: tags stripped, line breaks kept and
+     * normalized to `\n`, and the length capped at NOTES_MAX_LENGTH.
+     *
+     * @param array<mixed> $input Raw settings.
+     *
+     * @return Developer
+     */
+    private static function sanitize_developer(array $input): array
+    {
+        $defaults = self::developer_defaults();
+        $notes = $input['notes'] ?? null;
+
+        return [
+            'custom_code' => self::bool($input['custom_code'] ?? null, $defaults['custom_code']),
+            'notes'       => is_string($notes) ? mb_substr(sanitize_textarea_field(str_replace(["\r\n", "\r"], "\n", $notes)), 0, self::NOTES_MAX_LENGTH) : $defaults['notes'],
         ];
     }
 
