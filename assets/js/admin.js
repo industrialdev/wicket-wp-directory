@@ -716,3 +716,363 @@ document
 		} );
 	} );
 } )();
+
+/**
+ * Card View: the live card preview (`[data-wd-preview]`).
+ *
+ * While the panel is on screen, every change in the settings box posts the
+ * box's card-related sections (type, eligibility, cards, member list) to the
+ * preview endpoint (`data-url`, REST nonce `data-nonce`), a moment after the
+ * last change. The server renders one card with them; nothing is saved. The
+ * first response also brings the frame's document (the site's stylesheets),
+ * set once as the frame's `srcdoc`; later cards replace the root's content.
+ *
+ * - The card: a group directory's Group Member card when its settings are
+ *   the ones shown (`[data-wd-card="member"]` not hidden), else the main card.
+ * - Width (`data-wd-preview-width`): the frame takes the width's pixels
+ *   (`data-widths`) and is scaled down when the panel is narrower, so the
+ *   theme's breakpoints see a real desktop, tablet or phone. Remembered in
+ *   localStorage.
+ * - Previous / Next step through the matching records.
+ * - Links and forms in the card do nothing.
+ *
+ * A failed request says so and keeps the last card. WordPress's heartbeat
+ * refreshes the REST nonce on a long edit.
+ */
+( function () {
+	const panel = document.querySelector( '[data-wd-preview]' );
+	const box = panel?.closest( '.wicket-directory-admin' );
+
+	if ( ! panel || ! box || ! window.fetch || ! window.URLSearchParams ) {
+		return;
+	}
+
+	const form = box.closest( 'form' );
+	const stage = panel.querySelector( '[data-wd-preview-stage]' );
+	const frame = panel.querySelector( '[data-wd-preview-frame]' );
+	const status = panel.querySelector( '[data-wd-preview-status]' );
+	const records = panel.querySelector( '[data-wd-preview-records]' );
+	const widthButtons = Array.from(
+		panel.querySelectorAll( '[data-wd-preview-width]' )
+	);
+	const texts = JSON.parse( panel.dataset.texts || '{}' );
+	const widths = JSON.parse( panel.dataset.widths || '{}' );
+	const storageKey = 'wicket-directory-preview-width';
+	const sections =
+		/^wicket_directory\[(type|eligibility|card|member_card|roster)\]/;
+
+	let nonce = panel.dataset.nonce;
+	let width = Object.keys( widths )[ 0 ];
+	let sample = 1;
+	let total = 0;
+	let visible = false;
+	let pending = true;
+	let timer;
+	let lastKey = '';
+	let request = 0;
+	let controller;
+	let frameState = 'none'; // none | loading | ready
+	let queued = null;
+	let observer;
+
+	try {
+		const stored = window.localStorage.getItem( storageKey );
+
+		if ( stored && widths[ stored ] ) {
+			width = stored;
+		}
+	} catch ( e ) {
+		// Storage can be unavailable; keep the first width.
+	}
+
+	const format = ( text, ...values ) =>
+		values.reduce(
+			( result, value, index ) =>
+				result.replace( `%${ index + 1 }$s`, String( value ) ),
+			text || ''
+		);
+
+	const say = ( text, kind = '' ) => {
+		status.textContent = text;
+		status.dataset.kind = kind;
+	};
+
+	const card = () => {
+		const member = box.querySelector(
+			'[data-wd-tab-panel="card"] [data-wd-card="member"]'
+		);
+
+		return member && ! member.hidden ? 'member' : 'card';
+	};
+
+	const collect = () => {
+		const params = new window.URLSearchParams();
+
+		if ( form ) {
+			new window.FormData( form ).forEach( ( value, name ) => {
+				if ( typeof value === 'string' && sections.test( name ) ) {
+					params.append( name, value );
+				}
+			} );
+		}
+
+		params.set( 'card', card() );
+		params.set( 'sample', String( sample ) );
+
+		return params;
+	};
+
+	const doc = () => {
+		try {
+			return frame.contentDocument;
+		} catch ( e ) {
+			return null;
+		}
+	};
+
+	const layout = () => {
+		const target = widths[ width ] || stage.clientWidth;
+		const scale = Math.min( 1, stage.clientWidth / target );
+		const frameDoc = frameState === 'ready' ? doc() : null;
+		const height = frameDoc
+			? Math.ceil( frameDoc.documentElement.scrollHeight )
+			: 0;
+
+		frame.style.width = `${ target }px`;
+		frame.style.height = `${ height }px`;
+		frame.style.transform = scale < 1 ? `scale(${ scale })` : '';
+		stage.style.height = height ? `${ Math.ceil( height * scale ) }px` : '';
+		stage.classList.toggle( 'is-scaled', scale < 1 );
+	};
+
+	const setWidth = ( key ) => {
+		width = key;
+		widthButtons.forEach( ( button ) => {
+			button.setAttribute(
+				'aria-pressed',
+				button.dataset.wdPreviewWidth === key ? 'true' : 'false'
+			);
+		} );
+
+		try {
+			window.localStorage.setItem( storageKey, key );
+		} catch ( e ) {
+			// Not remembered; fine.
+		}
+
+		layout();
+	};
+
+	const inject = ( data ) => {
+		const root = doc()?.getElementById( 'wicket-directory-preview-root' );
+
+		if ( ! root ) {
+			return;
+		}
+
+		root.innerHTML = data.html || '';
+		layout();
+	};
+
+	const show = ( data ) => {
+		total = Number( data.total ) || 0;
+		sample = Number( data.number ) || 1;
+		records.hidden = data.sample !== '' || total < 2;
+
+		if ( data.sample ) {
+			say( texts[ data.sample ] || '', 'sample' );
+		} else if ( data.group ) {
+			say( format( texts.member, sample, total, data.group ) );
+		} else if ( total > 0 ) {
+			say( format( texts.record, sample, total ) );
+		} else {
+			say( '' );
+		}
+
+		if ( data.frame && frameState === 'none' ) {
+			frameState = 'loading';
+			queued = data;
+			frame.srcdoc = data.frame;
+		} else if ( frameState === 'loading' ) {
+			queued = data;
+		} else {
+			inject( data );
+		}
+	};
+
+	const refresh = ( force = false ) => {
+		window.clearTimeout( timer );
+
+		if ( ! visible ) {
+			pending = true;
+			return;
+		}
+
+		pending = false;
+
+		const params = collect();
+		const key = params.toString();
+
+		if ( ! force && key === lastKey ) {
+			return;
+		}
+
+		lastKey = key;
+
+		if ( frameState === 'none' ) {
+			params.set( 'frame', '1' );
+		}
+
+		const current = ++request;
+
+		controller?.abort();
+		controller = window.AbortController
+			? new window.AbortController()
+			: null;
+		panel.setAttribute( 'aria-busy', 'true' );
+		say( texts.loading, 'loading' );
+
+		window
+			.fetch( panel.dataset.url, {
+				method: 'POST',
+				credentials: 'same-origin',
+				headers: { 'X-WP-Nonce': nonce },
+				body: params,
+				signal: controller?.signal,
+			} )
+			.then( ( response ) =>
+				response.ok
+					? response.json()
+					: Promise.reject( new Error( String( response.status ) ) )
+			)
+			.then( ( data ) => {
+				if ( current !== request ) {
+					return;
+				}
+
+				show( data );
+				// The server may have moved to another record (past the last one).
+				lastKey = collect().toString();
+			} )
+			.catch( ( error ) => {
+				if ( current !== request || error?.name === 'AbortError' ) {
+					return;
+				}
+
+				lastKey = '';
+				say( texts.error, 'error' );
+			} )
+			.finally( () => {
+				if ( current === request ) {
+					panel.removeAttribute( 'aria-busy' );
+				}
+			} );
+	};
+
+	const schedule = () => {
+		window.clearTimeout( timer );
+		timer = window.setTimeout( refresh, 400 );
+	};
+
+	frame.addEventListener( 'load', () => {
+		const frameDoc = doc();
+
+		if ( frameState !== 'loading' || ! frameDoc ) {
+			return;
+		}
+
+		frameState = 'ready';
+
+		// A preview: links and forms in the card go nowhere.
+		frameDoc.addEventListener( 'click', ( event ) => {
+			if ( event.target.closest?.( 'a[href], button[type="submit"]' ) ) {
+				event.preventDefault();
+			}
+		} );
+		frameDoc.addEventListener( 'submit', ( event ) =>
+			event.preventDefault()
+		);
+
+		const FrameObserver = frame.contentWindow?.ResizeObserver;
+
+		if ( FrameObserver ) {
+			new FrameObserver( layout ).observe( frameDoc.documentElement );
+		}
+
+		if ( queued ) {
+			inject( queued );
+			queued = null;
+		}
+	} );
+
+	[ 'input', 'change' ].forEach( ( type ) =>
+		box.addEventListener( type, ( event ) => {
+			if ( ! panel.contains( event.target ) ) {
+				schedule();
+			}
+		} )
+	);
+
+	// Buttons that change settings without an input event (insert a custom field path, remove a chip).
+	box.addEventListener( 'click', ( event ) => {
+		if (
+			! panel.contains( event.target ) &&
+			event.target.closest?.( 'button' )
+		) {
+			schedule();
+		}
+	} );
+
+	widthButtons.forEach( ( button ) =>
+		button.addEventListener( 'click', () =>
+			setWidth( button.dataset.wdPreviewWidth )
+		)
+	);
+
+	panel.querySelectorAll( '[data-wd-preview-step]' ).forEach( ( button ) =>
+		button.addEventListener( 'click', () => {
+			if ( total > 1 ) {
+				const step = Number( button.dataset.wdPreviewStep );
+
+				sample = ( ( sample - 1 + step + total ) % total ) + 1;
+				refresh( true );
+			}
+		} )
+	);
+
+	window.addEventListener( 'resize', layout );
+
+	window.jQuery?.( document ).on( 'heartbeat-tick', ( event, data ) => {
+		if ( data?.rest_nonce ) {
+			nonce = data.rest_nonce;
+		}
+	} );
+
+	// Only fetch while the panel is on screen: not on another tab, in a closed box or scrolled away.
+	if ( window.IntersectionObserver ) {
+		observer = new window.IntersectionObserver(
+			( entries ) => {
+				visible = entries.some( ( entry ) => entry.isIntersecting );
+
+				if ( visible ) {
+					layout();
+
+					if ( pending ) {
+						refresh();
+					}
+				}
+			},
+			{ rootMargin: '200px 0px' }
+		);
+		observer.observe( panel );
+	} else {
+		visible = true;
+	}
+
+	panel.hidden = false;
+	setWidth( width );
+
+	if ( ! observer ) {
+		refresh();
+	}
+} )();

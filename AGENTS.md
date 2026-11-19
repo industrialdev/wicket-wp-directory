@@ -4,7 +4,7 @@ Wicket Directory adds configurable public directories of **Individuals** and **O
 
 > **Status: in development (scaffold landed).** The approved plan is `docs/engineering/mvp-plan.md`. Read it before writing code; it is the source of truth for scope, data model and decisions. Classes and paths below are the planned layout unless marked as landed. Update this file as they land.
 
-MVP scope: Individual and Organization directories only. Phase 2 (`docs/engineering/phase-2-tickets.md`) is under way: the Group directory type landed in P2.1 (config, query builder, eligibility, data, admin), its card in P2.2, group member lists (Default View, View Members, Back to Directory) in P2.3, the Group Member card with its own card config and facets in P2.4, Organization Contact on the org card (Membership Owner / Relationship Types) in P2.5, Employer on the individual and Group Member cards (Designation = the post-nominal field) in P2.6, and the `[col]/{{field}}` merge-tag card template engine (Advance cards: config, render path, field catalog, Standard → template generator) in P2.7, its admin editor (Standard / Advance switch, template textarea, field picker, dirty flag) in P2.8, and the Developer tab (Custom code switch, Developer Notes, hook reference, registered custom fields, Custom Code label on All Directories) in P2.9. Still to do, so don't build them without being asked: the admin live card preview (P2.10) and the Phase 2 acceptance pass (P2.11).
+MVP scope: Individual and Organization directories only. Phase 2 (`docs/engineering/phase-2-tickets.md`) is under way: the Group directory type landed in P2.1 (config, query builder, eligibility, data, admin), its card in P2.2, group member lists (Default View, View Members, Back to Directory) in P2.3, the Group Member card with its own card config and facets in P2.4, Organization Contact on the org card (Membership Owner / Relationship Types) in P2.5, Employer on the individual and Group Member cards (Designation = the post-nominal field) in P2.6, and the `[col]/{{field}}` merge-tag card template engine (Advance cards: config, render path, field catalog, Standard → template generator) in P2.7, its admin editor (Standard / Advance switch, template textarea, field picker, dirty flag) in P2.8, the Developer tab (Custom code switch, Developer Notes, hook reference, registered custom fields, Custom Code label on All Directories) in P2.9, and the admin live card preview (one card from the unsaved settings, Desktop / Tablet / Mobile, sample record fallback) in P2.10. Still to do, so don't build it without being asked: the Phase 2 acceptance pass (P2.11).
 
 ## Commands
 
@@ -105,6 +105,19 @@ wicket-wp-directory.php         (landed) header: Requires Plugins: wicket-wp-bas
     Api\DirectoryCache           (landed) save_post_wicket_directory (priority 20, after the settings save) and before_delete_post → purge(ID):
                                  deletes the directory's `wicket_directory_{ID}_*` transients and the `wicket_directory_labels_*` ones. Under a
                                  persistent object cache: label transients by name per known language; results expire (their keys already changed)
+    Admin\CardPreview            (landed, P2.10; every request: REST isn't admin) POST wicket-directory/v1/directories/{id}/preview
+                                 (permission: manage_options + edit_post; cookie auth needs the wp_rest nonce): body `wicket_directory[...]` (the box's
+                                 sections), `card` card | member, `sample` (from 1), `frame`. config(post, posted) = DirectoryMetaBoxes::merge() over the
+                                 stored config → sanitize(…, previous), as the save does; nothing is saved → DirectoryRenderer::render_preview() →
+                                 {html, number, total, sample (reason or ''), group} + `frame` when asked: views/preview-frame.php, the site's stylesheets
+                                 (wp_enqueue_scripts run in the REST request, then wp_print_styles(), font faces, Additional CSS; no scripts, no admin
+                                 bar) and an empty #wicket-directory-preview-root. panel_args(post) → views/preview.php, printed first in the Card View
+                                 by render_card_box(): one panel, `hidden` until admin.js shows it, data-wd-type-unchanged, data-url / data-nonce /
+                                 data-texts / data-widths (desktop 1280, tablet 768, mobile 375), the iframe, status line, Previous / Next record
+                                 assets/js/admin.js: while the panel is on screen (IntersectionObserver), input / change / button clicks in the box →
+                                 400 ms later POST the type, eligibility, card, member_card and roster fields (FormData; skipped when unchanged; the
+                                 previous request aborted); first response's `frame` → iframe srcdoc, later cards → the root's innerHTML; the frame
+                                 keeps its width and scales down to fit; links and submits in it do nothing; heartbeat refreshes the nonce
     Admin\ListColumns            (landed, admin only) Type and Status columns after Title on All Directories; non-published rows say "Not shown on the site";
                                  a "Custom Code" pill (`.wicket-directory-pill`) under the type when has_custom_code(); enqueues admin.css on edit.php
     Block\DirectoryBlock         (landed) dynamic block `wicket/directory` registered from build/directory (built from blocks/directory); adds the `wicket` category if missing;
@@ -126,6 +139,14 @@ Block render_callback / ServerSideRender
   → Block\BlockAttributes (landed; sanitize, clamp; sort(type) → type default for an invalid defaultSort)
   → Render\DirectoryRenderer   (landed) render(BlockAttributes)
       → load directory post (missing/trashed/not `publish` → '' for visitors; parts/notice.php in the editor preview)
+      (admin card preview, P2.10: render_preview(post, config, members, sample) instead: for_render(); one record, the sample-th
+          (page size 1), through repository->uncached() (no transient read or write); the Group Member card's group = roster.group in
+          the Group Members view (group() lookup), else the first group of the list (its member_count batch off); query_args, entry
+          and card_template filters as below, before_render not fired; links '#'; no record / API failure / no group →
+          Render\PreviewSample (one made-up resource + included contacts matching the card's rules + the tier, employer, Organization
+          Contact and group member batches the card asks for; types and roles: the configured ones, else the MDP's first) and a
+          SAMPLE_* reason; templates/parts/card-preview.php = the card in .wicket-directory (--preview) > __results > __list > __item;
+          a Throwable is logged and gives parts/notice.php)
       → group directory with member lists (has_roster()): the group is roster.group (Group Members view) or wd{ID}_group (Group List +
           Member List); DirectoryRepository::group() guards it (not found → the list, or a notice in the Group Members view), then
           render_roster(): RequestParams::for_roster() (wd{ID}m_ prefix, person sorts) → before_render → fetch_roster()
@@ -205,7 +226,7 @@ Template\TemplateGenerator generate(type, card, members): the template a Standar
 Template\CardContext / TagValue  value objects
 ```
 
-There is **one render path**. The frontend and the block editor preview both go through `DirectoryRenderer`. Don't add a second one.
+There is **one render path**. The frontend, the block editor preview and the admin card preview all go through `DirectoryRenderer`. Don't add a second one.
 
 ## Key Rules
 
@@ -244,9 +265,9 @@ There is **one render path**. The frontend and the block editor preview both go 
 |---|---|
 | `wicket_directory/query_args`, `wicket_directory/query_args_{slug}` (filter) | (landed) Modify the API query before it runs. Gets `$args` (`filter`, `page`, `sort`, `include`), `DirectoryConfig`, `RequestParams`. `{slug}` is the directory post's slug. A group member list's query is a `people/query`: tell it by `$params->is_roster()` |
 | `wicket_directory/entry`, `wicket_directory/entry_{slug}` (filter) | (landed) Modify one entry's data before its card renders. Gets the entry's `to_array()`, the raw API resource and `DirectoryConfig`; returns the array. Unknown keys are dropped and wrong-typed values keep the original; custom data goes under `extra`. A person's (and a member list's) entries have `employers` (list of `{id, name, relationship}`); a member list's also have `role`, `role_label`, `status`, `start_date`, `end_date`; an organization's have `contacts` (list of `{id, name, title, relationship, emails, phones}`). An Advance card's tags read the filtered entry, and `{{extra.key}}` prints a scalar (or list of scalars) a filter put under `extra` |
-| `wicket_directory/before_render`, `wicket_directory/before_render_{slug}` (action) | (landed) Runs before the listing's API query and render. Gets `DirectoryConfig`, `RequestParams`, the directory `WP_Post`. Output it prints comes before the directory. Not fired for a missing or unpublished directory. For a group member list it gets the member list's params and runs after the group lookup |
+| `wicket_directory/before_render`, `wicket_directory/before_render_{slug}` (action) | (landed) Runs before the listing's API query and render. Gets `DirectoryConfig`, `RequestParams`, the directory `WP_Post`. Output it prints comes before the directory. Not fired for a missing or unpublished directory, nor by the admin card preview (it renders one card, not the listing). For a group member list it gets the member list's params and runs after the group lookup |
 | `wicket_directory/card_template` (filter) | (landed) Swap the card template file, once per render. Gets the located absolute path (`''` when none), `DirectoryConfig` (as for_render() gives it), the directory `WP_Post`. A return that isn't an existing file keeps the located one. An Advance card's located file is `cards/card-template.php` |
-| `wicket_directory/cache_ttl` (filter) | (landed) API response cache lifetime in seconds (default 600). Gets `$ttl`, `DirectoryConfig`, the directory `WP_Post`. `0` disables the cache |
+| `wicket_directory/cache_ttl` (filter) | (landed) API response cache lifetime in seconds (default 600). Gets `$ttl`, `DirectoryConfig`, the directory `WP_Post`. `0` disables the cache. The admin card preview never caches and doesn't run it |
 | `wicket_directory/labels_cache_ttl` (filter) | (landed) Lifetime of the per-language enum and org-type label transient that facets and cards share (default 3600). Gets `$ttl`, `$lang`. `0` disables it |
 | `wicket_directory/fields`, `wicket_directory/fields_{slug}` (filter) | (landed, P2.9) Register the custom fields your code adds, so the Developer tab lists them with their merge tag and the Advance editor's field picker offers them under Custom Fields. Gets `$fields` (`[]`), `DirectoryConfig`, the directory `WP_Post`; returns the array. Add `$fields['key'] = 'Label'` or `['label' => …, 'description' => …]` (or a list item with a `key`), keyed by what your `wicket_directory/entry` callback puts under `extra`, so an Advance card prints it with `{{extra.key}}`. Keys may hold letters, digits, `_` and `-`; others are dropped. Edit screen only: rendering never runs it |
 

@@ -90,6 +90,11 @@ final class DirectoryRepository
     private Closure $client_factory;
 
     /**
+     * Whether pages are read from and written to the transient cache.
+     */
+    private bool $cache = true;
+
+    /**
      * @param (callable(): mixed)|null $client_factory Returns the API client. Defaults to
      *                                                 wicket_api_client(). Tests pass a fake.
      */
@@ -98,6 +103,23 @@ final class DirectoryRepository
         $this->client_factory = $client_factory !== null
             ? Closure::fromCallable($client_factory)
             : static fn (): mixed => wicket_api_client();
+    }
+
+    /**
+     * A copy that never reads or writes the transient cache.
+     *
+     * The admin card preview (DirectoryRenderer::render_preview()) uses it:
+     * its config isn't saved, so every change would leave a transient behind
+     * that only the next save purges, and a cached page could hide the change.
+     *
+     * @return self
+     */
+    public function uncached(): self
+    {
+        $copy = clone $this;
+        $copy->cache = false;
+
+        return $copy;
     }
 
     /**
@@ -834,10 +856,14 @@ final class DirectoryRepository
      * @param WP_Post         $directory The directory post.
      * @param DirectoryConfig $config    The directory's config.
      *
-     * @return int Seconds; 0 or less disables the cache.
+     * @return int Seconds; 0 or less disables the cache. Always 0 for an uncached() copy.
      */
     private function cache_ttl(WP_Post $directory, DirectoryConfig $config): int
     {
+        if (!$this->cache) {
+            return 0;
+        }
+
         /**
          * Change how long a directory's API responses are cached.
          *

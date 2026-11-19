@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Wicket\Directory;
 
+use Wicket\Directory\Admin\CardPreview;
 use Wicket\Directory\Admin\DirectoryMetaBoxes;
 use Wicket\Directory\Admin\ListColumns;
 use Wicket\Directory\Api\DirectoryCache;
@@ -77,6 +78,8 @@ final class Plugin
         (new DirectoryPostType())->register();
         (new DirectoryBlock())->register();
         (new DirectoryCache())->register();
+        // The edit screen's card preview endpoint: REST requests aren't admin requests.
+        (new CardPreview())->register();
 
         if (is_admin()) {
             (new DirectoryMetaBoxes())->register();

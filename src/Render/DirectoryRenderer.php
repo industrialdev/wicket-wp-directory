@@ -51,6 +51,26 @@ final class DirectoryRenderer
     public const ADVANCE_CARD = 'cards/card-template';
 
     /**
+     * The admin card preview's template: one card in the directory's wrappers.
+     */
+    public const PREVIEW_TEMPLATE = 'parts/card-preview';
+
+    /**
+     * Why the card preview shows the made-up record (PreviewSample).
+     */
+    public const SAMPLE_NONE = 'none';
+
+    /**
+     * … because the API failed.
+     */
+    public const SAMPLE_UNAVAILABLE = 'unavailable';
+
+    /**
+     * … because a group directory has no group whose members to show.
+     */
+    public const SAMPLE_NO_GROUP = 'no_group';
+
+    /**
      * Runs one page query.
      */
     private DirectoryRepository $repository;
@@ -161,6 +181,168 @@ final class DirectoryRenderer
 
             return $this->notice(__('This directory could not be displayed. Check the log for details.', 'wicket-directory'));
         }
+    }
+
+    /**
+     * Render one card of a directory, for the edit screen's live preview.
+     *
+     * Admin\CardPreview calls it with the unsaved settings. It goes the way
+     * render() does: for_render(), the repository with the query_args
+     * filters, EntryMapper with the entry filters, the card template the
+     * card_template filter picks, so the card is the one visitors and the
+     * block editor preview get. What differs: one record (the `$sample`th,
+     * a page of one), no cache, links that go nowhere (`#`), and no
+     * before_render, which prepares a listing (none renders here). The card
+     * sits in the directory's own wrappers (`parts/card-preview.php`). Draft
+     * directories preview too.
+     *
+     * A group directory's Group Member card shows a member of the group its
+     * Group Members view is set to, else of the first group in its list.
+     * When no record matches, the API fails or there is no group, the card
+     * shows PreviewSample's made-up record, and `sample` says why.
+     *
+     * @param WP_Post         $directory The directory post.
+     * @param DirectoryConfig $config    The settings to preview, sanitized (not for_render() yet).
+     * @param bool            $members   A group directory's Group Member card. Ignored when its
+     *                                   Default View has no member lists.
+     * @param int             $sample    Which matching record to show, from 1. Past the last one
+     *                                   shows the last.
+     *
+     * @return array{html: string, number: int, total: int, sample: string, group: string}
+     *     `html` the card; `number` the record shown and `total` the records that match
+     *     (0 for the sample); `sample` '' for a real record, else a SAMPLE_* reason;
+     *     `group` the member card's group name.
+     */
+    public function render_preview(WP_Post $directory, DirectoryConfig $config, bool $members = false, int $sample = 1): array
+    {
+        $result = ['html' => '', 'number' => 0, 'total' => 0, 'sample' => '', 'group' => ''];
+
+        try {
+            $config = $config->for_render();
+            $members = $members && $config->has_roster();
+            $lang = QueryBuilder::language(wicket_get_current_language());
+            $attributes = BlockAttributes::from_array(['directoryId' => $directory->ID, 'resultsPerPage' => 1]);
+            $repository = $this->repository->uncached();
+            $samples = new PreviewSample($this->labels);
+            $group = null;
+
+            if ($members) {
+                [$group, $reason] = $this->preview_group($repository, $directory, $config, $attributes, $lang);
+                $params = RequestParams::for_roster(
+                    $directory->ID,
+                    is_array($group) ? (string) $group['id'] : '',
+                    $config->member_facets,
+                    [],
+                    $attributes->sort(DirectoryType::Individual),
+                    query: [RequestParams::roster_prefix($directory->ID) . 'pg' => (string) max(1, $sample)],
+                );
+                $page = $group !== null
+                    ? $repository->fetch_roster($directory, $config, $params->group, $params, 1, [], $lang)
+                    : ResultPage::empty(1);
+            } else {
+                $reason = '';
+                $params = RequestParams::from_request(
+                    $directory->ID,
+                    $config,
+                    [],
+                    $attributes->sort($config->type),
+                    query: [RequestParams::prefix($directory->ID) . 'pg' => (string) max(1, $sample)],
+                );
+                $page = $repository->fetch($directory, $config, $params, 1, $lang);
+            }
+
+            if ($reason === '' && $page->is_empty()) {
+                $reason = $page->unavailable ? self::SAMPLE_UNAVAILABLE : self::SAMPLE_NONE;
+            }
+
+            if ($reason !== '') {
+                $page = $samples->page($config, $members, $lang);
+            } else {
+                $result['number'] = $page->page;
+                $result['total'] = $page->total;
+            }
+
+            $result['sample'] = $reason;
+
+            if ($members) {
+                $roster_group = $this->mapper->roster_group($group ?? $samples->group($config, $lang), $lang);
+                $result['group'] = $roster_group->name;
+                $entries = $this->mapper->map_members($page, $config, $directory->post_name, $lang);
+                $view = [
+                    'type'            => DirectoryType::Individual,
+                    'card'            => $config->member_card,
+                    'facets'          => $config->member_facets,
+                    'collapse_refine' => false,
+                    'roster'          => ['group' => $roster_group, 'back_url' => '#'],
+                    'card_template'   => $this->card_template($directory, $config, $config->template(true) !== null ? self::ADVANCE_CARD : 'cards/card-group-member'),
+                ];
+            } else {
+                // As in render_list(): View Members shows only where there are member lists to open.
+                $members_url = $config->type === DirectoryType::Group && $config->roster['default_view'] === DirectoryConfig::VIEW_GROUPS_MEMBERS
+                    ? static fn (string $uuid): string => '#'
+                    : null;
+                $entries = $this->mapper->map($page, $config, $directory->post_name, $lang, $members_url);
+                $view = [
+                    'type'            => $config->type,
+                    'card'            => $config->card,
+                    'facets'          => $config->facets,
+                    'collapse_refine' => false,
+                    'roster'          => null,
+                    'card_template'   => $this->card_template($directory, $config, $config->template() !== null ? self::ADVANCE_CARD : 'cards/card-' . $config->type->value),
+                ];
+            }
+
+            if ($entries === []) {
+                throw new \RuntimeException('The preview page mapped to no entry.');
+            }
+
+            $args = $this->directory_args($directory, $config, $attributes, $params, $page, $entries, [], $view, $lang, true);
+            $result['html'] = $this->templates->render(self::PREVIEW_TEMPLATE, ['entry' => $entries[0]] + $args);
+        } catch (Throwable $e) {
+            $this->log_error($directory, 'Could not render the card preview: ' . $e->getMessage());
+
+            $result = ['html' => $this->templates->render('parts/notice', [
+                'message'   => __('The card preview could not be displayed. Check the log for details.', 'wicket-directory'),
+                'templates' => $this->templates,
+            ])] + $result;
+        }
+
+        return $result;
+    }
+
+    /**
+     * The group whose member the card preview shows.
+     *
+     * The Group Members view's group (looked up with every eligibility
+     * key), else the first group of the list: the one visitors reach first.
+     *
+     * @param DirectoryRepository $repository An uncached repository.
+     * @param WP_Post             $directory  The directory post.
+     * @param DirectoryConfig     $config     The group directory's render config.
+     * @param BlockAttributes     $attributes The preview's attributes, for the list's sort.
+     * @param string              $lang       Two-letter language code.
+     *
+     * @return array{array<string, mixed>|null, string} The `groups` resource, or null with a SAMPLE_* reason.
+     */
+    private function preview_group(DirectoryRepository $repository, WP_Post $directory, DirectoryConfig $config, BlockAttributes $attributes, string $lang): array
+    {
+        if ($config->roster['default_view'] === DirectoryConfig::VIEW_MEMBERS) {
+            $group = $config->roster['group'] !== '' ? $repository->group($directory, $config, $config->roster['group']) : null;
+
+            return [$group, $group === null ? self::SAMPLE_NO_GROUP : ''];
+        }
+
+        // Only the group's ID is needed: spare the card's member count batch.
+        $lookup = DirectoryConfig::sanitize(array_replace_recursive($config->to_array(), ['card' => ['member_count' => false]]));
+        $params = RequestParams::from_request($directory->ID, $lookup, [], $attributes->sort($config->type), query: []);
+        $list = $repository->fetch($directory, $lookup, $params, 1, $lang);
+        $group = $list->items[0] ?? null;
+
+        if (!is_array($group) || !is_string($group['id'] ?? null)) {
+            return [null, $list->unavailable ? self::SAMPLE_UNAVAILABLE : self::SAMPLE_NO_GROUP];
+        }
+
+        return [$group, ''];
     }
 
     /**
@@ -373,10 +555,43 @@ final class DirectoryRenderer
         array $view,
         string $lang,
     ): void {
-        $is_preview = ($this->is_preview)();
+        $this->templates->load('directory', $this->directory_args($directory, $config, $attributes, $params, $page, $entries, $facet_options, $view, $lang, ($this->is_preview)()));
+    }
+
+    /**
+     * The args of `directory.php`, which its parts and cards get too.
+     *
+     * @param WP_Post                                                  $directory     The directory post.
+     * @param DirectoryConfig                                          $config        Its config.
+     * @param BlockAttributes                                          $attributes    The block's attributes.
+     * @param RequestParams                                            $params        The rendered list's params.
+     * @param ResultPage                                               $page          The page of results.
+     * @param list<\Wicket\Directory\Data\Entry>                     $entries       Its entries.
+     * @param array<string, list<array{value: string, label: string}>> $facet_options Facet choices.
+     * @param array<string, mixed>                                     $view          `type`, `card`, `facets`,
+     *                                                                                `collapse_refine`, `roster`
+     *                                                                                and `card_template`.
+     * @param string                                                   $lang          Two-letter language code.
+     * @param bool                                                     $is_preview    The editor or admin preview:
+     *                                                                                links go nowhere.
+     *
+     * @return array<string, mixed>
+     */
+    private function directory_args(
+        WP_Post $directory,
+        DirectoryConfig $config,
+        BlockAttributes $attributes,
+        RequestParams $params,
+        ResultPage $page,
+        array $entries,
+        array $facet_options,
+        array $view,
+        string $lang,
+        bool $is_preview,
+    ): array {
         $prefix = $params->prefix;
 
-        $this->templates->load('directory', $view + [
+        return $view + [
             'directory'     => $directory,
             'config'        => $config,
             'attributes'    => $attributes,
@@ -394,7 +609,7 @@ final class DirectoryRenderer
             'templates'     => $this->templates,
             // An Advance card's tag resolver (cards/card-template.php), one per list.
             'merge_tags'    => new MergeTags($this->labels),
-        ]);
+        ];
     }
 
     /**

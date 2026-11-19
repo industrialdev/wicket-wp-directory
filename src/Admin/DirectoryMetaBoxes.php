@@ -287,6 +287,9 @@ final class DirectoryMetaBoxes
      * custom fields code registers (DeveloperTab::fields(), `extra.{key}`), on
      * both of a group directory's cards.
      *
+     * The live preview (CardPreview, `views/preview.php`) comes first: one
+     * panel, which shows whichever card's settings are shown.
+     *
      * Only the saved type's settings are shown, in card_groups() order. A type
      * change resets the card on save, so the tab asks the admin to save first.
      * As in the Directory panels, saved data fields and contact types the MDP
@@ -303,6 +306,8 @@ final class DirectoryMetaBoxes
         $config = DirectoryConfig::from_post($post) ?? DirectoryConfig::defaults();
         $lang = (string) wicket_get_current_language();
         $custom = self::custom_field_group(DeveloperTab::fields($config, $post));
+
+        $this->view('preview', CardPreview::panel_args($post));
 
         if ($config->type !== DirectoryType::Group) {
             $this->view('card', $this->card_view_args($config, $config->card, $config->type, self::card_fields($config->type), self::card_groups($config->type), $lang, false, $custom));

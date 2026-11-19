@@ -1,7 +1,7 @@
 ---
 title: "Phase 2 Tickets"
 audience: [developer, agent]
-updated: 2026-11-17
+updated: 2026-11-19
 ---
 
 # `wicket-wp-directory` Phase 2 tickets
@@ -28,7 +28,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | P2.7 | [Merge-tag card template engine (`[col]` / `{{field}}`)](#p27) | P2.4, P2.5, P2.6 | Done |
 | P2.8 | [Admin Advance Configurations editor](#p28) | P2.7 | Done |
 | P2.9 | [Developer tab: custom code switch, notes, hook reference and custom fields](#p29) | — | Done |
-| P2.10 | [Admin live card preview](#p210) | P2.7 | To do |
+| P2.10 | [Admin live card preview](#p210) | P2.7 | Done |
 | P2.11 | [Phase 2 acceptance: theme check, docs and Atlas](#p211) | P2.1–P2.10 | To do |
 
 ## 0. API spike
@@ -385,6 +385,38 @@ A live preview on the edit screen that renders a sample card as settings change,
 - The preview matches the frontend and the block editor preview for the same config.
 - Capability and nonce checks on the endpoint.
 - Unit tests for the endpoint.
+
+**Outcome (2026-11-19):**
+
+- **Endpoint** (`Admin\CardPreview`): `POST /wicket-directory/v1/directories/{id}/preview`, registered on every request (REST requests aren't admin requests).
+  - Permission: `manage_options` (the directory capability) and `edit_post` on the directory. WordPress's cookie authentication needs the `wp_rest` nonce (`X-WP-Nonce`); without it the request is logged out and refused (401). A post that isn't a directory, or is trashed, gets a 404.
+  - Body: `wicket_directory[...]` (the settings box's fields), `card` (`card` or `member`), `sample` (which matching record, from 1) and `frame`.
+  - The posted sections go over the stored config and through `DirectoryConfig::sanitize()` with the stored config as `$previous`, exactly as the save handler does (`CardPreview::config()`). So a type change resets the card, and an untouched Advance template follows the posted checklist. Nothing is saved, and the directory's cache isn't touched.
+  - Returns `{html, number, total, sample, group}`: the card, the record shown of how many match, the sample reason (empty for a real record) and, for the Group Member card, the group's name.
+- **One render path** (`DirectoryRenderer::render_preview()`): `for_render()`, the repository with the `query_args` filters, `EntryMapper` with the `entry` filters, the card template the `card_template` filter picks. The card is the one the listing renders, character for character (tested against the frontend and the block editor preview). What differs:
+  - One record: a page of one, the `sample`th, so Previous / Next step through what the settings match.
+  - No cache: `DirectoryRepository::uncached()`. Unsaved configs would each leave a transient behind until the next save, and a cached page could hide a change.
+  - `before_render` doesn't fire: it prepares a listing, and nothing here prints one. Links go to `#`.
+  - Draft directories preview too.
+  - The card sits in the directory's own wrappers (`templates/parts/card-preview.php`: `.wicket-directory--preview` > `__results` > `__list` > `__item`), so its container queries apply. A theme can override the part to match an override of `directory.php`.
+  - A group directory's Group Member card shows a member of the Group Members view's group (looked up with every eligibility key), else of the first group in the list.
+- **Sample record** (`Render\PreviewSample`): when nothing matches the settings, the API fails, or a member card has no group, the card shows a made-up record and the status line says why. It is a raw MDP page (one resource, its included contact records, and the tier, employer, Organization Contact and group member batches the card asks for), so it goes through the same mapper, filters and templates. Each contact record matches its card rule, so every contact field that's on shows. Data fields the card shows get their first enum label, else the field name. Types and roles are the configured ones, else the first the MDP lists, so their labels are real. Images stay empty.
+- **Frame.** The card shows in an `iframe` whose document (`views/preview-frame.php`, sent once with the first response as `srcdoc`) holds the site's stylesheets. The endpoint runs `wp_enqueue_scripts` as a page does, then prints only styles (with their inline CSS, so the theme's tokens and global styles come along), `directory.css`, font faces and the Customizer's Additional CSS, with the admin bar off. No scripts: the card needs none, and analytics or consent banners stay out. So the card looks as on the site, and the theme's media queries see the frame's width.
+  - Without the theme's script there is no Alpine, so a long description shows in full, not as an excerpt with Show more (the cards' no-script state).
+- **Panel** (`views/preview.php`, first in the Card View; one panel for a group directory's two cards, following the card switch):
+  - Desktop / Tablet / Mobile buttons: 1280, 768 and 375 px. The frame keeps that width and is scaled down to fit the panel. The choice is remembered (localStorage) and isn't a setting.
+  - A status line ("Record 3 of 186, from Wicket.", "Member 1 of 4 in Board, from Wicket.", or the sample reason) and Previous / Next record.
+  - Hidden without the script, and while the type select differs from the saved type (the Card View asks for a save then). Nothing in it posts.
+- **Script** (`assets/js/admin.js`):
+  - Any input, change or button click in the settings box schedules an update 400 ms later.
+  - The update posts only the sections that shape the card (type, eligibility, card, member_card, roster). It is skipped when they haven't changed since the last one, and a newer request aborts an older one.
+  - It only runs while the panel is on screen (IntersectionObserver): not on another tab, in a closed box or scrolled away.
+  - A failed update says so and keeps the last card. The heartbeat's `rest_nonce` keeps the nonce fresh on a long edit.
+- **Checked:**
+  - Unit tests in `qa`: `CardPreviewRenderTest` (one record and its number, wrappers, same card as the listing and the block editor preview, unsaved settings, drafts, no cache, the filters and no `before_render`, Advance cards, View Members, the Group Member card in both views and without a group, each sample reason and what the sample fills, errors) and `CardPreviewTest` (route, `rest_api_init`, permissions, 404s, the posted settings, nothing saved, the frame document and a failing `wp_enqueue_scripts` callback, `config()`, the panel's markup). The Directory test bootstrap gains `WP_REST_Request` and `WP_Error` shims; `AbstractTestCase` stubs `rest_url`, `wp_create_nonce` and `wp_json_encode`.
+  - On the local stack against the staging MDP, through `rest_do_request()` for the three real directories: real records for individual, organization (with Organization Contact) and group cards, and a Group Member card; 401 when logged out. The frame document holds the theme, child theme and `directory.css` stylesheets and no script.
+  - The script, in a browser against the real settings box markup (rendered by `wp eval`) with the endpoint mocked by those responses, and the frame loading the stack's real stylesheets. Checked: first load, the debounce, skipping an unchanged form, the widths and scaling, Previous / Next with wrap-around, a failed request, hiding on a type change, links in the card doing nothing, the group card switch, and the Advance prefill and typing.
+  - Not checked in WP admin itself: the browser pane doesn't trust the local stack's certificate. QA has no JS unit tests, so the script has no automated test.
 
 ## 5. Acceptance
 

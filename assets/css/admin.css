@@ -239,6 +239,131 @@
 	resize: vertical;
 }
 
+/* Card View: the live card preview (CardPreview) */
+
+.wicket-directory-admin .wd-preview {
+	margin: 0 0 18px;
+	padding: 0 0 18px;
+	border-bottom: 1px solid var(--wd-admin-border-faint);
+}
+
+.wicket-directory-admin .wd-preview__bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 8px 16px;
+	margin: 0 0 10px;
+}
+
+.wicket-directory-admin .wd-preview__bar .wd-panel__label {
+	margin-bottom: 4px;
+}
+
+.wicket-directory-admin .wd-preview__intro {
+	margin: 0;
+	max-width: 60ch;
+}
+
+.wicket-directory-admin .wd-preview__widths {
+	display: inline-flex;
+	flex: none;
+}
+
+.wicket-directory-admin .wd-preview__width.button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 36px;
+	padding: 0 6px;
+	border-radius: 0;
+}
+
+.wicket-directory-admin .wd-preview__width.button + .wd-preview__width.button {
+	margin-left: -1px;
+}
+
+.wicket-directory-admin .wd-preview__width.button:first-child {
+	border-radius: 3px 0 0 3px;
+}
+
+.wicket-directory-admin .wd-preview__width.button:last-child {
+	border-radius: 0 3px 3px 0;
+}
+
+.wicket-directory-admin .wd-preview__width[aria-pressed="true"] {
+	position: relative;
+	z-index: 1;
+	border-color: var(--wd-admin-accent);
+	background: var(--wd-admin-accent-soft);
+	color: var(--wd-admin-accent);
+}
+
+.wicket-directory-admin .wd-preview__stage {
+	position: relative;
+	min-height: 120px;
+	overflow: hidden;
+	border: 1px solid var(--wd-admin-border-faint);
+	border-radius: 2px;
+	background: var(--wd-admin-surface-muted);
+}
+
+.wicket-directory-admin .wd-preview__frame {
+	display: block;
+	max-width: none;
+	margin: 0 auto;
+	border: 0;
+	background: var(--wd-admin-surface);
+	transform-origin: 0 0;
+}
+
+/* Scaled down, the frame keeps its full width; centring would push it off the stage. */
+.wicket-directory-admin .wd-preview__stage.is-scaled .wd-preview__frame {
+	margin: 0;
+}
+
+.wicket-directory-admin .wd-preview[aria-busy="true"] .wd-preview__frame {
+	opacity: 0.6;
+	transition: opacity 0.15s ease-in;
+}
+
+.wicket-directory-admin .wd-preview__footer {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px 16px;
+	margin-top: 8px;
+}
+
+.wicket-directory-admin .wd-preview__status {
+	flex: 1 1 240px;
+	min-height: 1.5em;
+	margin: 0;
+	font-size: 12px;
+	color: var(--wd-admin-help);
+}
+
+.wicket-directory-admin .wd-preview__status[data-kind="sample"] {
+	color: var(--wd-admin-ink);
+	font-weight: 600;
+}
+
+.wicket-directory-admin .wd-preview__status[data-kind="error"] {
+	color: var(--wd-admin-danger);
+}
+
+.wicket-directory-admin .wd-preview__records {
+	display: flex;
+	gap: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.wicket-directory-admin .wd-preview[aria-busy="true"] .wd-preview__frame {
+		transition: none;
+	}
+}
+
 /* Tabs */
 
 .wicket-directory-admin .wd-tabs {
