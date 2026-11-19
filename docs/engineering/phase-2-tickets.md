@@ -29,7 +29,7 @@ Keep the **Status** column current: `To do`, `In progress`, `Done`.
 | P2.8 | [Admin Advance Configurations editor](#p28) | P2.7 | Done |
 | P2.9 | [Developer tab: custom code switch, notes, hook reference and custom fields](#p29) | — | Done |
 | P2.10 | [Admin live card preview](#p210) | P2.7 | Done |
-| P2.11 | [Phase 2 acceptance: theme check, docs and Atlas](#p211) | P2.1–P2.10 | To do |
+| P2.11 | [Phase 2 acceptance: theme check, docs and Atlas](#p211) | P2.1–P2.10 | Done |
 
 ## 0. API spike
 
@@ -435,3 +435,24 @@ A live preview on the edit screen that renders a sample card as settings change,
 
 - `wicket test unit:directory` passes.
 - No breaking change to existing directories.
+
+**Outcome (2026-11-19):**
+
+- **No breaking change to MVP directories.** The same directories were rendered with the plugin as it was before Phase 2 (commit `2be4474`, P2.0 docs) and with `main`, against the staging MDP, with the cache off.
+  - Two directories hold the config the MVP code saves: its own `sanitize()->to_array()`, so no Phase 2 key. One is an individual directory. One is CHFA-like: active membership, org type and data-field facets, a data-field eyebrow, chips and a website label.
+  - Eleven requests: default, keyword, location (individual), a facet, the last sort option and page 2. The HTML is the same apart from whitespace.
+  - The block's attributes and `directory.css` changed by additions only (`rosterResultsPerPage`, `collapseRosterRefineOnMobile`; group, member list, Organization Contact and Advance card rules).
+  - The CHFA directory itself can't be rebuilt here: staging has no `orgmemberdir` schema. That stays with MVP ticket 7.2.
+  - New unit test `Phase2CompatibilityTest` pins this: the two MVP-saved configs read back with every MVP key unchanged and every Phase 2 feature off, survive a save with no changes, and the MVP block attributes keep their meaning.
+- **Phase 2 on the local stack against staging** (`wp eval-file`, cache off, temporary directories deleted afterwards):
+  - **Default View.** Group List: the groups, no View Members, and a `wd{ID}_group` link is ignored. Group Members: the chosen group's members; with no group chosen, nothing for visitors. Group List + Member List: View Members links, and each group's member count matches its member list (FIG C: 5).
+  - **Member list** (FIG C). Last name Z–A; 2 per page through `rosterResultsPerPage`, page 2 shows 3–4 of 5; Order by offers the four person sorts. Over HTTP, Back to Directory drops `wd{ID}_group` and the `wd{ID}m_` params and keeps the others. An unknown UUID and an excluded group fall back to the list. Inactive member status is empty (nobody on staging is inactive).
+  - **Organization Contact.** Relationship Types (40 contact rows on the first 6 cards), Membership Owner (25 rows), and off (none).
+  - **Employer.** Shows on the individual card (first on page 2).
+  - **Advance templates.** The template generated from the individual card's toggles. A hand-written one with columns, a typed contact tag, `{{employer}}` and `{{extra.p211}}` filled by a `wicket_directory/entry` callback. An organization template with `{{org_contact}}`. Each renders six `--template` cards.
+  - **Developer tab** (`render_developer_box()` as an admin): the hook reference with the `_{slug}` names, the notes, the switch, and a `wicket_directory/fields` field with its `{{extra.key}}` tag.
+  - **Live preview** (`rest_do_request()` as an admin): real records for the individual, organization (record 2 of 22), group and Group Member cards (with the group's name); an unsaved Advance template; the `none` sample when nothing matches; the frame document. 404 for a page that isn't a directory, 401 logged out, and the stored config unchanged.
+  - **Org data-field facets** are now verified with matching records ([api-queries.md](api-queries.md#data-fields-opt-in-and-facets)).
+- **Docs.** This file; api-queries.md (org data fields); AGENTS.md (status, no more "planned" markers); README.md (groups, Phase 2); the Atlas package doc (block attributes, status) and the MVP plan's artifact line.
+- **Tests.** `composer test:unit:directory` in the stack's PHP container: 1062 passed. `wicket test unit:directory` first asks for `wicket test --setup` (test environment last set up 2026-11-04).
+- **Theme check** (group, Group Member and Organization Contact cards; Wicket theme v2 and a default theme; light and dark; desktop and mobile): done by hand in a browser on the local stack, no issues found. The Wicket theme has no dark mode, so light and dark apply to the default theme's style variations.

@@ -1,8 +1,8 @@
 # Wicket Directory
 
-Configurable public directories of **Individuals** and **Organizations** from the Wicket member data platform (MDP). Visitors can search, filter, sort and page through them. Admins set up a directory once in WP Admin and place it on any page with the **Wicket Directory** block.
+Configurable public directories of **Individuals**, **Organizations** and **Groups** from the Wicket member data platform (MDP). Visitors can search, filter, sort and page through them, and open a group's member list. Admins set up a directory once in WP Admin and place it on any page with the **Wicket Directory** block. Each card is built from toggles or, in Advance mode, from a `[col]` / `{{field}}` template, with a live preview on the edit screen.
 
-> **Status: in development.** The MVP plan is in [docs/engineering/mvp-plan.md](docs/engineering/mvp-plan.md) and the build tickets are in [docs/engineering/mvp-tickets.md](docs/engineering/mvp-tickets.md).
+> **Status: in development, no release yet.** The MVP plan is in [docs/engineering/mvp-plan.md](docs/engineering/mvp-plan.md). The build tickets are in [docs/engineering/mvp-tickets.md](docs/engineering/mvp-tickets.md) and [docs/engineering/phase-2-tickets.md](docs/engineering/phase-2-tickets.md). Hooks and the architecture are in [AGENTS.md](AGENTS.md).
 
 ## Requirements
 

@@ -2,9 +2,9 @@
 
 Wicket Directory adds configurable public directories of **Individuals** and **Organizations** from the Wicket member data platform (MDP). Visitors can search, filter, sort and page through them. Admins set up a directory once in WP Admin and place it on any page with the **Wicket Directory** Gutenberg block. It replaces the per-client member-directory page templates that used to live in child themes.
 
-> **Status: in development (scaffold landed).** The approved plan is `docs/engineering/mvp-plan.md`. Read it before writing code; it is the source of truth for scope, data model and decisions. Classes and paths below are the planned layout unless marked as landed. Update this file as they land.
+> **Status: in development, no release yet.** The MVP and Phase 2 are built on `main`. The approved MVP plan is `docs/engineering/mvp-plan.md`. Read it before writing code; it is the source of truth for scope, data model and decisions. Phase 2 decisions are in each ticket's Outcome in `docs/engineering/phase-2-tickets.md`. Keep this file current when classes, paths or hooks change.
 
-MVP scope: Individual and Organization directories only. Phase 2 (`docs/engineering/phase-2-tickets.md`) is under way: the Group directory type landed in P2.1 (config, query builder, eligibility, data, admin), its card in P2.2, group member lists (Default View, View Members, Back to Directory) in P2.3, the Group Member card with its own card config and facets in P2.4, Organization Contact on the org card (Membership Owner / Relationship Types) in P2.5, Employer on the individual and Group Member cards (Designation = the post-nominal field) in P2.6, and the `[col]/{{field}}` merge-tag card template engine (Advance cards: config, render path, field catalog, Standard → template generator) in P2.7, its admin editor (Standard / Advance switch, template textarea, field picker, dirty flag) in P2.8, the Developer tab (Custom code switch, Developer Notes, hook reference, registered custom fields, Custom Code label on All Directories) in P2.9, and the admin live card preview (one card from the unsaved settings, Desktop / Tablet / Mobile, sample record fallback) in P2.10. Still to do, so don't build it without being asked: the Phase 2 acceptance pass (P2.11).
+MVP scope: Individual and Organization directories only. Phase 2 (`docs/engineering/phase-2-tickets.md`) is built: the Group directory type landed in P2.1 (config, query builder, eligibility, data, admin), its card in P2.2, group member lists (Default View, View Members, Back to Directory) in P2.3, the Group Member card with its own card config and facets in P2.4, Organization Contact on the org card (Membership Owner / Relationship Types) in P2.5, Employer on the individual and Group Member cards (Designation = the post-nominal field) in P2.6, and the `[col]/{{field}}` merge-tag card template engine (Advance cards: config, render path, field catalog, Standard → template generator) in P2.7, its admin editor (Standard / Advance switch, template textarea, field picker, dirty flag) in P2.8, the Developer tab (Custom code switch, Developer Notes, hook reference, registered custom fields, Custom Code label on All Directories) in P2.9, and the admin live card preview (one card from the unsaved settings, Desktop / Tablet / Mobile, sample record fallback) in P2.10. The Phase 2 acceptance pass (P2.11) ran on 2026-11-19: MVP directories render the same as before Phase 2, and the Phase 2 features work against staging. Its theme check (Wicket and default themes, light and dark, desktop and mobile) found no issues, so Phase 2 is accepted. Don't build beyond the tickets without being asked.
 
 ## Commands
 
@@ -33,7 +33,7 @@ Tests live in the shared QA suite at `../../../../../../qa/`, never in this repo
 - **Run them** with `wicket test unit:directory` before handing off. If any fail, report the output. Until a `wicket` CLI release registers the package, the CLI answers `unknown component "directory"`: run `docker exec -w /var/www/qa wicket-wp-stack-php-1 composer test:unit:directory` instead.
 - Tests live in `qa/tests/Unit/Directory/`. `AbstractTestCase` stubs the WordPress functions the config, query and data classes call. `Support/Fixtures` holds MDP payloads. Guard each file with `wicket_skip_if_missing()` on a symbol the change introduces, so qa `main` stays green while the plugin PR is open.
 
-## Architecture (planned)
+## Architecture
 
 ### Bootstrap
 
@@ -259,7 +259,7 @@ There is **one render path**. The frontend, the block editor preview and the adm
 - **Contact info** (address, email, phone, website) always goes through `ContactResolver` (type → show-in-directory / primary truth table). Don't pick records ad hoc in templates.
 - **Draft directories never render** on the frontend, even if a block still points at them.
 
-## Key Extension Points (planned)
+## Key Extension Points
 
 | Hook | Purpose |
 |---|---|

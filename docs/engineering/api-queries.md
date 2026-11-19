@@ -1,7 +1,7 @@
 ---
 title: "MDP API Queries"
 audience: [developer, agent]
-updated: 2026-11-12
+updated: 2026-11-19
 ---
 
 # Verified MDP queries for directories
@@ -148,7 +148,7 @@ A multi-select facet sends its selected values as one array (any-of). Different 
 
 The opt-in condition (`opt_in: {schema_key, field, value}`) is one more `search_query` key: `data_fields.{schema_key}.value.{field}` ⇒ `value`.
 
-Org data fields are **unverified positively**: no organization on this staging tenant has data fields. The predicate is recognised (no-match → 0), and the CHFA production template uses the same syntax for `orgmemberdir.optin`. Re-check during the CHFA parity check (ticket 7.2).
+Org data fields are **verified** (P2.11, 2026-11-19). Staging organizations now have data fields. Of the 22 orgs with an active membership, `organization_member_services.coreServices` ⇒ `['Newsletter']` → 1, and that org's card shows the value; `['Newsletter', 'Grants']` → 1 (any-of); `['Newsletter']` + `organization_operational_information.yearsSinceFoundedRange` ⇒ `['> 10']` → 0 (AND). The CHFA production template uses the same syntax for `orgmemberdir.optin`. Staging has no `orgmemberdir` schema, so that key itself is still checked during the CHFA parity check (ticket 7.2).
 
 ### Sort
 
